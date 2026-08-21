@@ -1,0 +1,117 @@
+name: korp-erp
+
+services:
+  backend-build:
+    image: mcr.microsoft.com/dotnet/sdk:10.0.302
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    command: dotnet build Korp.Erp.sln --configuration Release
+    profiles: [tooling]
+
+  backend-test:
+    image: mcr.microsoft.com/dotnet/sdk:10.0.302
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    command: dotnet test Korp.Erp.sln --configuration Release
+    profiles: [tooling]
+
+  frontend-build:
+    image: node:24-bookworm-slim
+    working_dir: /workspace/frontend/korp-erp-web
+    volumes:
+      - .:/workspace
+    command: sh -c "npm ci && npm run build"
+    profiles: [tooling]
+
+  identity-api:
+    build:
+      context: .
+      dockerfile: src/Services/Identity/Korp.Identity.Api/Dockerfile
+    profiles: [applications]
+
+  inventory-api:
+    build:
+      context: .
+      dockerfile: src/Services/Inventory/Korp.Inventory.Api/Dockerfile
+    profiles: [applications]
+
+  billing-api:
+    build:
+      context: .
+      dockerfile: src/Services/Billing/Korp.Billing.Api/Dockerfile
+    profiles: [applications]
+
+  gateway-api:
+    build:
+      context: .
+      dockerfile: src/Gateway/Korp.Gateway.Api/Dockerfile
+    profiles: [applications]
+
+  frontend-artifacts:
+    build:
+      context: frontend/korp-erp-web
+      dockerfile: Dockerfile
+    profiles: [applications]
+
+  identity-db-test:
+    image: postgres:16.10-bookworm
+    environment:
+      POSTGRES_DB: identity_db
+      POSTGRES_USER: identity
+      POSTGRES_PASSWORD: identity_test_password
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U identity -d identity_db"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    tmpfs: [/var/lib/postgresql/data]
+    profiles: [persistence-tests]
+
+  inventory-db-test:
+    image: postgres:16.10-bookworm
+    environment:
+      POSTGRES_DB: inventory_db
+      POSTGRES_USER: inventory
+      POSTGRES_PASSWORD: inventory_test_password
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U inventory -d inventory_db"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    tmpfs: [/var/lib/postgresql/data]
+    profiles: [persistence-tests]
+
+  billing-db-test:
+    image: postgres:16.10-bookworm
+    environment:
+      POSTGRES_DB: billing_db
+      POSTGRES_USER: billing
+      POSTGRES_PASSWORD: billing_test_password
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U billing -d billing_db"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    tmpfs: [/var/lib/postgresql/data]
+    profiles: [persistence-tests]
+
+  persistence-tests:
+    image: mcr.microsoft.com/dotnet/sdk:10.0.302
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    environment:
+      IDENTITY_TEST_CONNECTION: Host=identity-db-test;Database=identity_db;Username=identity;Password=identity_test_password
+      INVENTORY_TEST_CONNECTION: Host=inventory-db-test;Database=inventory_db;Username=inventory;Password=inventory_test_password
+      BILLING_TEST_CONNECTION: Host=billing-db-test;Database=billing_db;Username=billing;Password=billing_test_password
+    depends_on:
+      identity-db-test:
+        condition: service_healthy
+      inventory-db-test:
+        condition: service_healthy
+      billing-db-test:
+        condition: service_healthy
+    command: dotnet test Korp.Erp.sln --configuration Release
+    profiles: [persistence-tests]

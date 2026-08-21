@@ -1,0 +1,31 @@
+# .NET
+**/bin/
+**/obj/
+**/TestResults/
+artifacts/
+
+# Frontend
+**/node_modules/
+**/dist/
+**/.angular/
+**/coverage/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+**/secrets.json
+
+# IDE and operating system
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+
+# Logs and local runtime data
+*.log
+logs/
+.docker-data/
