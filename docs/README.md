@@ -46,7 +46,8 @@ O enunciado original está em `../teste tecnico KORP ERP.pdf`.
 | [`PLANO-IMPLEMENTACAO-SDD-04.md`](PLANO-IMPLEMENTACAO-SDD-04.md) | Gate B do Identity Service | Aprovado | SDD-01 a SDD-04 e ADRs aplicáveis | 2026-08-21 |
 | [`RELATORIO-IMPLEMENTACAO-SDD-04.md`](RELATORIO-IMPLEMENTACAO-SDD-04.md) | Login, lockout, JWT, segurança e evidências do Identity | Aprovado | SDD-04 e plano de implementação | 2026-08-21 |
 | [`PLANO-IMPLEMENTACAO-SDD-05.md`](PLANO-IMPLEMENTACAO-SDD-05.md) | Gate B do Inventory Service | Aprovado | SDD-01 a SDD-05 e ADRs aplicáveis | 2026-08-21 |
-| [`RELATORIO-IMPLEMENTACAO-SDD-05.md`](RELATORIO-IMPLEMENTACAO-SDD-05.md) | Produtos, estoque, concorrência, segurança e evidências | Em revisão | SDD-05 e plano de implementação | Aguardando aprovação do Gate C |
+| [`RELATORIO-IMPLEMENTACAO-SDD-05.md`](RELATORIO-IMPLEMENTACAO-SDD-05.md) | Produtos, estoque, concorrência, segurança e evidências | Aprovado | SDD-05 e plano de implementação | 2026-08-21 |
+| [`PLANO-IMPLEMENTACAO-SDD-06.md`](PLANO-IMPLEMENTACAO-SDD-06.md) | Gate B do Billing Service | Aprovado | SDD-01 a SDD-06 e ADRs aplicáveis | 2026-08-21 |
 
 ---
 
@@ -85,7 +86,7 @@ A lista abaixo é uma proposta inicial. Títulos, divisão e dependências podem
 | 02 | [`SDD-02-MODELAGEM-DE-DADOS.md`](SDD-02-MODELAGEM-DE-DADOS.md) | Entidades, invariantes, bancos, índices e auditoria | Validado | SDD-01 | 2026-08-20 |
 | 03 | [`SDD-03-CONTRATOS-HTTP-E-EVENTOS.md`](SDD-03-CONTRATOS-HTTP-E-EVENTOS.md) | APIs e contratos de integração | Implementado | SDD-01, SDD-02 | Gate C contratual em revisão |
 | 04 | [`SDD-04-IDENTITY-SERVICE.md`](SDD-04-IDENTITY-SERVICE.md) | Usuários, login, JWT e políticas de autorização | Validado | SDD-02, SDD-03 | Gate C aprovado em 2026-08-21 |
-| 05 | [`SDD-05-INVENTORY-SERVICE.md`](SDD-05-INVENTORY-SERVICE.md) | Produtos, saldos e movimentações | Implementado | SDD-02, SDD-03, SDD-04 | Gate C em revisão |
+| 05 | [`SDD-05-INVENTORY-SERVICE.md`](SDD-05-INVENTORY-SERVICE.md) | Produtos, saldos e movimentações | Validado | SDD-02, SDD-03, SDD-04 | Gate C aprovado em 2026-08-21 |
 | 06 | [`SDD-06-BILLING-SERVICE.md`](SDD-06-BILLING-SERVICE.md) | Notas, itens, estados e impressão | Aprovado | SDD-02, SDD-03, SDD-04, SDD-05 | Gate A aprovado |
 | 07 | [`SDD-07-EMISSAO-E-CONSISTENCIA-DISTRIBUIDA.md`](SDD-07-EMISSAO-E-CONSISTENCIA-DISTRIBUIDA.md) | Emissão, baixa, falhas, idempotência e concorrência | Aprovado | SDD-05, SDD-06 | Gate A aprovado |
 | 08 | [`SDD-08-API-GATEWAY.md`](SDD-08-API-GATEWAY.md) | Entrada única, roteamento, autenticação e políticas transversais | Aprovado | SDD-03, SDD-04, SDD-05, SDD-06, SDD-07 | Gate A aprovado |

@@ -1,7 +1,7 @@
 # Relatório de Implementação - SDD-05
 
 > Gate: C - Conclusão
-> Status: Em revisão pelo engenheiro
+> Status: Aprovado pelo engenheiro
 > Data: 2026-08-21
 > SDD: `SDD-05-INVENTORY-SERVICE.md`
 > Plano: `PLANO-IMPLEMENTACAO-SDD-05.md`
