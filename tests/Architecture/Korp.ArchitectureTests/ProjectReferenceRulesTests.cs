@@ -59,6 +59,29 @@ public sealed class ProjectReferenceRulesTests
             "Korp.Shared.Contracts.csproj"));
     }
 
+    [Fact]
+    public void SharedContractsExposeOnlyIntegrationNamespaces()
+    {
+        var contractsDirectory = Path.Combine(
+            RepositoryRoot,
+            "src",
+            "Shared",
+            "Korp.Shared.Contracts");
+        var sourceFiles = Directory.GetFiles(contractsDirectory, "*.cs", SearchOption.AllDirectories)
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.NotEmpty(sourceFiles);
+        Assert.All(sourceFiles, path =>
+        {
+            var source = File.ReadAllText(path);
+            Assert.Contains("namespace Korp.Integration.Contracts", source, StringComparison.Ordinal);
+            Assert.DoesNotContain(".Domain", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("EntityFrameworkCore", source, StringComparison.Ordinal);
+            Assert.DoesNotContain("RabbitMQ", source, StringComparison.Ordinal);
+        });
+    }
+
     private static void AssertReferences(string projectPath, params string[] expectedProjectNames)
     {
         var document = XDocument.Load(projectPath);

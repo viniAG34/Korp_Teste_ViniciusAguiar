@@ -1,10 +1,11 @@
 # Relatório de Implementação do SDD-02
 
 > Gate: C - Conclusão
-> Status: Em revisão pelo engenheiro
+> Status: Aprovado pelo engenheiro
 > Data: 2026-08-20
 > Especificação: `SDD-02-MODELAGEM-DE-DADOS.md`
 > Plano aprovado: `PLANO-IMPLEMENTACAO-SDD-02.md`
+> Aprovação do Gate C: 2026-08-20
 
 ---
 

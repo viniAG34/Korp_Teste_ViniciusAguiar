@@ -1,0 +1,21 @@
+{
+  "messageId": "02b61d75-942a-4962-ab1c-d212d88c8548",
+  "messageType": "stock_deduction_requested",
+  "messageVersion": 1,
+  "occurredAtUtc": "2026-08-18T18:30:00Z",
+  "correlationId": "cd39c905-d8a5-427f-b12b-e90f2303bf98",
+  "causationId": null,
+  "producer": "billing",
+  "payload": {
+    "issuanceProcessId": "b6f53891-056a-4cf5-a113-70f8c53ceef5",
+    "invoiceId": "771ff4e5-1b47-4fb3-a7c4-fcb678b29fe7",
+    "invoiceNumber": 42,
+    "requestedByUserId": "6dab8c4c-2bb8-46cc-a865-0e992aaeb443",
+    "items": [
+      {
+        "productId": "37e52de4-b892-4418-8abd-9799ee95cb38",
+        "quantity": 2
+      }
+    ]
+  }
+}

@@ -181,7 +181,20 @@ O SDD-02 está implementado e aguarda aprovação do Gate C. Evidências detalha
 | QLT-001, QLT-002, QLT-003 | Testes unitários, contratos e integração com infraestrutura real | Todos | TST-CON-001 a TST-CON-022 |
 | QLT-006, QLT-007, QLT-008 | Rastreabilidade, proteção de dados e contratos verificáveis | CA-CON-02, CA-CON-03, CA-CON-14, CA-CON-16 | TST-CON-002 a TST-CON-005, TST-CON-020, TST-CON-021 |
 
-O SDD-03 possui Gate A aprovado. Implementações e evidências reais serão adicionadas somente na macroetapa de implementação.
+### Evidência contratual do SDD-03
+
+| Escopo | Implementação | Prova | Estado |
+|---|---|---|---|
+| Eventos V1 | Envelope, quatro payloads, constantes e fixtures em `Korp.Shared.Contracts` | TST-CON-014 e TST-CON-015 | Atendido no nível contratual |
+| Identity HTTP | DTOs de login e política JSON | TST-CON-003 e inspeção de campos sensíveis | Baseline atendida; comportamento no SDD-04 |
+| Product HTTP | DTOs público/interno, criação e paginação | TST-CON-003 e inspeção de ownership | Baseline atendida; endpoints no SDD-05 |
+| Invoice HTTP | DTOs, estados, itens, processo, ETag e Idempotency Key | TST-CON-003, TST-CON-009 e TST-CON-013 no nível puro | Baseline atendida; comportamento no SDD-06 |
+| Fronteiras | Shared Contracts sem domínio, EF Core ou RabbitMQ | Teste arquitetural automatizado | Atendido |
+| Cobertura | Assemblies manuais aplicáveis | Cobertura entre 84,38% e 95,95% | Atendido |
+
+CA-CON-04, CA-CON-09, CA-CON-10, CA-CON-14 e CA-CON-15 possuem evidência contratual direta. Os demais critérios conservam destino explícito nos SDDs 04 a 08 e não são declarados funcionalmente atendidos antes dos endpoints, políticas, Gateway, PostgreSQL transacional ou RabbitMQ correspondentes.
+
+O SDD-03 está implementado como baseline contratual e aguarda revisão do relatório. A validação integral será cumulativa, após as provas dos SDDs proprietários.
 
 ---
 
