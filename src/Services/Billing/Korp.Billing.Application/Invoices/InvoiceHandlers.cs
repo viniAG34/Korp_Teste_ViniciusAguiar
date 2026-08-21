@@ -31,6 +31,7 @@ public sealed record InvoiceMutationResult(InvoiceMutationStatus Status, Invoice
 
 public sealed class CreateInvoiceHandler(
     IInvoiceRepository repository,
+    IInvoiceReadService readService,
     IInvoiceNumberGenerator numberGenerator,
     IGuidGenerator guidGenerator,
     TimeProvider timeProvider,
@@ -43,7 +44,8 @@ public sealed class CreateInvoiceHandler(
         repository.Add(invoice);
         await repository.SaveChangesAsync(cancellationToken);
         telemetry.InvoiceCreated();
-        return invoice.ToDetails();
+        return await readService.GetByIdAsync(invoice.Id, cancellationToken)
+            ?? throw new BillingConsistencyException("The created invoice could not be reloaded.");
     }
 }
 
@@ -68,6 +70,8 @@ public sealed class AddInvoiceItemHandler(
 {
     public async Task<InvoiceMutationResult> HandleAsync(AddInvoiceItemCommand command, CancellationToken cancellationToken)
     {
+        if (command.ProductId == Guid.Empty || command.Quantity <= 0)
+            throw new DomainRuleException(InvoiceErrors.InvalidQuantity, "Product and positive quantity are required.");
         var invoice = await repository.GetByIdAsync(command.InvoiceId, cancellationToken);
         var local = Validate(invoice, command.ExpectedVersion);
         if (local is not null) return local;

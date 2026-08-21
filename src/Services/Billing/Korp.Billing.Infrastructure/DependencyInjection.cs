@@ -16,10 +16,10 @@ public static class DependencyInjection
         if (string.IsNullOrWhiteSpace(connectionString))
             throw new InvalidOperationException("Billing database configuration is required.");
 
-        services.AddDbContext<BillingDbContext>(options =>
-            options.UseNpgsql(connectionString).UseSnakeCaseNamingConvention());
         services.AddDbContextFactory<BillingDbContext>(options =>
             options.UseNpgsql(connectionString).UseSnakeCaseNamingConvention());
+        services.AddScoped(services =>
+            services.GetRequiredService<IDbContextFactory<BillingDbContext>>().CreateDbContext());
         services.AddScoped<IInvoiceRepository, InvoiceRepository>();
         services.AddScoped<IInvoiceReadService, InvoiceReadService>();
         services.AddScoped<IIssuanceProcessReadService, IssuanceProcessReadService>();

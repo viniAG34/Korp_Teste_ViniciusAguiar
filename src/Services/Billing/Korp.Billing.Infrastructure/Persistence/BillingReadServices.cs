@@ -42,13 +42,15 @@ public sealed class InvoiceReadService(BillingDbContext context) : IInvoiceReadS
 public sealed class IssuanceProcessReadService(BillingDbContext context) : IIssuanceProcessReadService
 {
     public Task<PersistedIssuanceProcess?> GetByIdAsync(Guid processId, CancellationToken cancellationToken) =>
-        Query().SingleOrDefaultAsync(process => process.Id == processId, cancellationToken);
+        Project(context.InvoiceIssuanceProcesses.AsNoTracking().Where(process => process.Id == processId))
+            .SingleOrDefaultAsync(cancellationToken);
 
     public Task<PersistedIssuanceProcess?> GetByIdempotencyKeyAsync(Guid idempotencyKey, CancellationToken cancellationToken) =>
-        Query().SingleOrDefaultAsync(process => process.IdempotencyKey == idempotencyKey, cancellationToken);
+        Project(context.InvoiceIssuanceProcesses.AsNoTracking().Where(process => process.IdempotencyKey == idempotencyKey))
+            .SingleOrDefaultAsync(cancellationToken);
 
-    private IQueryable<PersistedIssuanceProcess> Query() =>
-        from process in context.InvoiceIssuanceProcesses.AsNoTracking()
+    private IQueryable<PersistedIssuanceProcess> Project(IQueryable<Domain.Issuance.InvoiceIssuanceProcess> processes) =>
+        from process in processes
         join invoice in context.Invoices.AsNoTracking() on process.InvoiceId equals invoice.Id
         select new PersistedIssuanceProcess(
             process.Id, process.InvoiceId, process.IdempotencyKey, process.Status,

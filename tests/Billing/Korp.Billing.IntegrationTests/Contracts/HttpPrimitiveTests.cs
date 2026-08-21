@@ -14,6 +14,7 @@ public sealed class HttpPrimitiveTests
         Assert.Equal(EntityTagParseStatus.Valid, result.Status);
         Assert.Equal((uint)42, result.Value?.Version);
         Assert.DoesNotContain("42", header, StringComparison.Ordinal);
+        Assert.DoesNotContain('=', header);
     }
 
     [Theory]
@@ -21,6 +22,8 @@ public sealed class HttpPrimitiveTests
     [InlineData("", EntityTagParseStatus.Missing)]
     [InlineData("opaque", EntityTagParseStatus.Invalid)]
     [InlineData("W/\"AAAAKg==\"", EntityTagParseStatus.Invalid)]
+    [InlineData("\"AAAAKg==\"", EntityTagParseStatus.Invalid)]
+    [InlineData("\"AAAAKg\", \"AAAAKw\"", EntityTagParseStatus.Invalid)]
     [InlineData("\"invalid\"", EntityTagParseStatus.Invalid)]
     public void EntityTagDistinguishesMissingAndInvalidValues(string? value, EntityTagParseStatus expected)
     {

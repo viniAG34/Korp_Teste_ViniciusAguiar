@@ -107,7 +107,11 @@ public sealed class TransitionInvoiceIssuanceHandler(
         var invoice = await unit.GetInvoiceAsync(command.InvoiceId, cancellationToken)
             ?? throw new BillingConsistencyException("Issuance invoice was not found.");
 
-        if (IsEquivalentTerminal(process.Status, command.Kind)) return;
+        if (command.Kind == IssuanceTransitionKind.AwaitingStock
+            && process.Status is InvoiceIssuanceProcessStatus.Completed
+                or InvoiceIssuanceProcessStatus.Rejected
+                or InvoiceIssuanceProcessStatus.ManualIntervention) return;
+        if (IsEquivalentTerminal(process, command)) return;
         if (process.Status is InvoiceIssuanceProcessStatus.Completed
             or InvoiceIssuanceProcessStatus.Rejected
             or InvoiceIssuanceProcessStatus.ManualIntervention)
@@ -139,9 +143,19 @@ public sealed class TransitionInvoiceIssuanceHandler(
         telemetry.IssuanceTransitioned(process.Status.ToString());
     }
 
-    private static bool IsEquivalentTerminal(InvoiceIssuanceProcessStatus status, IssuanceTransitionKind kind) =>
-        (status, kind) is
-            (InvoiceIssuanceProcessStatus.Completed, IssuanceTransitionKind.Completed)
-            or (InvoiceIssuanceProcessStatus.Rejected, IssuanceTransitionKind.Rejected)
-            or (InvoiceIssuanceProcessStatus.ManualIntervention, IssuanceTransitionKind.ManualIntervention);
+    private static bool IsEquivalentTerminal(
+        InvoiceIssuanceProcess process, TransitionInvoiceIssuanceCommand command) =>
+        (process.Status, command.Kind) switch
+        {
+            (InvoiceIssuanceProcessStatus.Completed, IssuanceTransitionKind.Completed) => true,
+            (InvoiceIssuanceProcessStatus.Rejected, IssuanceTransitionKind.Rejected) =>
+                string.Equals(process.OutcomeCode, command.OutcomeCode?.Trim(), StringComparison.Ordinal)
+                && string.Equals(process.OutcomeDescription, Normalize(command.OutcomeDescription), StringComparison.Ordinal),
+            (InvoiceIssuanceProcessStatus.ManualIntervention, IssuanceTransitionKind.ManualIntervention) =>
+                string.Equals(process.OutcomeCode, command.OutcomeCode?.Trim(), StringComparison.Ordinal)
+                && string.Equals(process.OutcomeDescription, Normalize(command.OutcomeDescription), StringComparison.Ordinal),
+            _ => false
+        };
+
+    private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

@@ -30,14 +30,20 @@ public sealed class ProductCatalogClient(HttpClient httpClient, IBillingTelemetr
                 }
 
                 if (!response.IsSuccessStatusCode)
+                {
+                    telemetry.ProductCatalogRequest("unavailable");
                     throw new ProductCatalogUnavailableException();
+                }
 
                 var snapshot = await response.Content.ReadFromJsonAsync<InternalProductSnapshot>(cancellationToken);
                 if (snapshot is null || snapshot.Id != productId
                     || string.IsNullOrWhiteSpace(snapshot.Code) || snapshot.Code.Length > 50
                     || string.IsNullOrWhiteSpace(snapshot.Description) || snapshot.Description.Length > 200
                     || snapshot.Code != snapshot.Code.Trim() || snapshot.Description != snapshot.Description.Trim())
+                {
+                    telemetry.ProductCatalogRequest("unavailable");
                     throw new ProductCatalogUnavailableException();
+                }
 
                 telemetry.ProductCatalogRequest("success");
                 return new ProductSnapshot(snapshot.Id, snapshot.Code, snapshot.Description);
