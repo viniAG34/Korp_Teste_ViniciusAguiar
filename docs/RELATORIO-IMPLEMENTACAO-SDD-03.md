@@ -1,10 +1,11 @@
 # Relatório de Implementação do SDD-03
 
 > Gate: C contratual - conclusão parcial controlada
-> Status: Em revisão pelo engenheiro
+> Status: Aprovado pelo engenheiro
 > Data: 2026-08-20
 > Especificação: `SDD-03-CONTRATOS-HTTP-E-EVENTOS.md`
 > Plano aprovado: `PLANO-IMPLEMENTACAO-SDD-03.md`
+> Aprovação do Gate C contratual: 2026-08-20
 
 ---
 

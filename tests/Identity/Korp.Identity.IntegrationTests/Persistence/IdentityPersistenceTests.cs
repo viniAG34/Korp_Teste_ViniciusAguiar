@@ -43,13 +43,35 @@ public sealed class IdentityPersistenceTests : IAsyncLifetime
 
         await using var secondScope = provider.CreateAsyncScope();
         var secondInitializer = secondScope.ServiceProvider.GetRequiredService<IdentityDatabaseInitializer>();
-        await secondInitializer.InitializeAsync(options with { Password = "Different-Password-That-Must-Not-Apply!" }, TestContext.Current.CancellationToken);
+        await secondInitializer.InitializeAsync(options with { Password = "Different-Password-2026-Must-Not-Apply!" }, TestContext.Current.CancellationToken);
         var context = secondScope.ServiceProvider.GetRequiredService<IdentityDbContext>();
 
         Assert.Equal(1, await context.Users.CountAsync(TestContext.Current.CancellationToken));
         Assert.Equal(1, await context.Roles.CountAsync(role => role.Name == IdentityDatabaseInitializer.AdministratorRole, TestContext.Current.CancellationToken));
         Assert.Equal(1, await context.UserRoles.CountAsync(TestContext.Current.CancellationToken));
         Assert.Equal(originalHash, await context.Users.Select(user => user.PasswordHash).SingleAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Theory]
+    [InlineData("invalid-email", "Strong-Test-Password-2026!")]
+    [InlineData("admin@korp.local", "too-short")]
+    [InlineData("admin@korp.local", "NO-LOWERCASE-2026!")]
+    [InlineData("admin@korp.local", "no-uppercase-2026!")]
+    [InlineData("admin@korp.local", "NoNumbersHere!")]
+    [InlineData("admin@korp.local", "NoSpecialCharacter2026")]
+    public async Task TstId005InvalidSeedConfigurationChangesNoIdentityState(string email, string password)
+    {
+        await using var provider = CreateServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        var initializer = scope.ServiceProvider.GetRequiredService<IdentityDatabaseInitializer>();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => initializer.InitializeAsync(
+            new IdentitySeedOptions(email, password),
+            TestContext.Current.CancellationToken));
+        var context = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+
+        Assert.Equal(0, await context.Users.CountAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(0, await context.Roles.CountAsync(TestContext.Current.CancellationToken));
     }
 
     private IdentityDbContext CreateContext()

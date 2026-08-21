@@ -10,8 +10,7 @@ public sealed class IdentityDatabaseInitializer(
 
     public async Task InitializeAsync(IdentitySeedOptions options, CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(options.Email);
-        ArgumentException.ThrowIfNullOrWhiteSpace(options.Password);
+        IdentitySeedOptionsValidator.EnsureValid(options);
         cancellationToken.ThrowIfCancellationRequested();
 
         if (!await roleManager.RoleExistsAsync(AdministratorRole))
@@ -19,15 +18,15 @@ public sealed class IdentityDatabaseInitializer(
             EnsureSucceeded(await roleManager.CreateAsync(new IdentityRole<Guid>(AdministratorRole)));
         }
 
-        var normalizedEmail = userManager.NormalizeEmail(options.Email);
-        var user = await userManager.FindByEmailAsync(normalizedEmail);
+        var email = options.Email.Trim();
+        var user = await userManager.FindByEmailAsync(email);
         if (user is null)
         {
             user = new ApplicationUser
             {
                 Id = Guid.NewGuid(),
-                Email = options.Email.Trim(),
-                UserName = options.Email.Trim(),
+                Email = email,
+                UserName = email,
                 EmailConfirmed = true,
             };
 

@@ -42,7 +42,9 @@ O enunciado original está em `../teste tecnico KORP ERP.pdf`.
 | [`PLANO-IMPLEMENTACAO-SDD-02.md`](PLANO-IMPLEMENTACAO-SDD-02.md) | Gate B da modelagem de domínio e persistência | Aprovado | Baseline aprovada e SDD-02 | 2026-08-20 |
 | [`RELATORIO-IMPLEMENTACAO-SDD-02.md`](RELATORIO-IMPLEMENTACAO-SDD-02.md) | Evidências e aprovação do Gate C da modelagem e persistência | Aprovado | SDD-02 e plano de implementação | 2026-08-20 |
 | [`PLANO-IMPLEMENTACAO-SDD-03.md`](PLANO-IMPLEMENTACAO-SDD-03.md) | Gate B dos contratos HTTP e eventos | Aprovado | SDD-01, SDD-02 e SDD-03 | 2026-08-20 |
-| [`RELATORIO-IMPLEMENTACAO-SDD-03.md`](RELATORIO-IMPLEMENTACAO-SDD-03.md) | Evidências da baseline contratual e critérios funcionalmente diferidos | Em revisão | SDD-03 e plano de implementação | 2026-08-20 |
+| [`RELATORIO-IMPLEMENTACAO-SDD-03.md`](RELATORIO-IMPLEMENTACAO-SDD-03.md) | Evidências da baseline contratual e critérios funcionalmente diferidos | Aprovado | SDD-03 e plano de implementação | 2026-08-20 |
+| [`PLANO-IMPLEMENTACAO-SDD-04.md`](PLANO-IMPLEMENTACAO-SDD-04.md) | Gate B do Identity Service | Aprovado | SDD-01 a SDD-04 e ADRs aplicáveis | 2026-08-21 |
+| [`RELATORIO-IMPLEMENTACAO-SDD-04.md`](RELATORIO-IMPLEMENTACAO-SDD-04.md) | Login, lockout, JWT, segurança e evidências do Identity | Em revisão | SDD-04 e plano de implementação | Aguardando aprovação do Gate C |
 
 ---
 

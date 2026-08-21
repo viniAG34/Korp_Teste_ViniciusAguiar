@@ -211,7 +211,16 @@ O SDD-03 está implementado como baseline contratual e aguarda revisão do relat
 | QLT-005 | Fronteira e ausência de dependências ou features proibidas | CA-ID-01, CA-ID-10, CA-ID-14 | TST-ID-001, TST-ID-018, TST-ID-022 |
 | QLT-006, QLT-007, QLT-008 | Rastreabilidade, segredos protegidos e startup verificável | CA-ID-03, CA-ID-11, CA-ID-12 | TST-ID-005, TST-ID-006, TST-ID-019, TST-ID-020 |
 
-O SDD-04 possui Gate A aprovado. Implementações e evidências reais serão adicionadas somente na macroetapa de implementação.
+### Evidências implementadas do SDD-04
+
+| IDs | Implementação e prova | Estado |
+|---|---|---|
+| DIF-002, CA-ID-01 a CA-ID-07, CA-ID-11, CA-ID-13 e CA-ID-14 | Login anônimo, Identity isolado, seed idempotente, lockout, JWT HS256, Problem Details e OpenAPI; 3 testes unitários e 28 de integração | Implementado e verificado |
+| CA-ID-12, QLT-007 | Respostas de erro sanitizadas e segredo sentinela ausente; configuração real permanece fora do repositório | Implementado no limite atual; observabilidade operacional acumula no SDD-11 |
+| CA-ID-08 a CA-ID-10, DIF-003 | Emissão e validação estrita do token comprovadas no Identity; validação local e policies nas APIs consumidoras | Parcial cumulativo; conclusão nos SDDs 05, 06 e 08 |
+| QLT-001 a QLT-004, QLT-008 | Build Release 0/0; regressão 102/102; Identity 31/31; cobertura manual aplicável de linhas: API 98,47%, Application 100%, Infrastructure 96,05% | Verificado; branches publicadas no relatório |
+
+O relatório `RELATORIO-IMPLEMENTACAO-SDD-04.md` contém os comandos, percentuais brutos, exclusões de código gerado, riscos residuais e avaliação do Gate C.
 
 ---
 
