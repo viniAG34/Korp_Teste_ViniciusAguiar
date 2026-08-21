@@ -242,7 +242,20 @@ O relatório `RELATORIO-IMPLEMENTACAO-SDD-04.md` contém os comandos, percentuai
 | QLT-001 a QLT-004 | Unitários, integração PostgreSQL e cobertura | Todos | TST-INV-001 a TST-INV-028 |
 | QLT-006 a QLT-008 | Rastreabilidade, segurança e comportamento verificável | CA-INV-15 a CA-INV-18 | TST-INV-024 a TST-INV-028 |
 
-O SDD-05 possui Gate A aprovado. Implementações e evidências reais serão adicionadas somente na macroetapa de implementação.
+### Evidências implementadas do SDD-05
+
+| IDs | Implementação e prova | Estado |
+|---|---|---|
+| OBR-002 a OBR-005, OBR-017 | cadastro, consultas, normalização, saldo inicial e ownership do Inventory | Implementado e verificado |
+| OBR-006 | snapshot interno sem saldo, autoria ou versão | Implementado; bloqueio externo da rota acumula no SDD-08 |
+| OBR-014, OPA-001 | baixa transacional, movimentos, `xmin` e reavaliação limitada | Implementado e verificado em PostgreSQL |
+| OPA-002 | repetição lógica equivalente sem nova baixa e divergência como falha técnica | Implementado no caso de uso; Inbox/Outbox e redelivery acumulam no SDD-07 |
+| DIF-002, DIF-003 | JWT validado localmente, `AuthenticatedUser`, `AdminOnly` e autoria por `sub` | Implementado e verificado |
+| DIF-008 | quatro rotas aprovadas presentes no OpenAPI e rotas excluídas ausentes | Implementado; enriquecimento documental final acumula no SDD-08/12 |
+| DIF-009 | log estruturado de criação e métricas de criação/baixa/conflito/duração | Implementado; logs distribuídos da baixa acumulam no adapter do SDD-07 |
+| QLT-001 a QLT-004, QLT-008 | 19 testes unitários, 23 integrações, build 0/0 e cobertura por assembly acima de 80% | Verificado; branches publicadas no relatório |
+
+O relatório `RELATORIO-IMPLEMENTACAO-SDD-05.md` registra comandos, percentuais, deferimentos cumulativos e riscos residuais.
 
 ---
 

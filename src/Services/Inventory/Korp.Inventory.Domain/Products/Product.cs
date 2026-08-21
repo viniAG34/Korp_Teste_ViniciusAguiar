@@ -125,6 +125,13 @@ public sealed class Product
             throw new DomainRuleException(ProductErrors.DescriptionTooLong, $"Product description cannot exceed {DescriptionMaxLength} characters.");
         }
 
+        if (normalizedDescription.Any(char.IsControl))
+        {
+            throw new DomainRuleException(
+                ProductErrors.DescriptionContainsControlCharacters,
+                "Product description cannot contain control characters.");
+        }
+
         return normalizedDescription;
     }
 }

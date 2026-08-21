@@ -30,6 +30,7 @@ public sealed class ProductTests
         Assert.Throws<DomainRuleException>(() => Product.Create(Guid.NewGuid(), "P1", "Product", 0, Guid.NewGuid(), default));
         Assert.Throws<DomainRuleException>(() => Product.Create(Guid.NewGuid(), "P1", " ", 0, Guid.NewGuid(), Now));
         Assert.Throws<DomainRuleException>(() => Product.Create(Guid.NewGuid(), "P1", new string('A', 201), 0, Guid.NewGuid(), Now));
+        Assert.Throws<DomainRuleException>(() => Product.Create(Guid.NewGuid(), "P1", "Invalid\nDescription", 0, Guid.NewGuid(), Now));
         Assert.Throws<DomainRuleException>(() => Product.Create(Guid.NewGuid(), "P1", "Product", -1, Guid.NewGuid(), Now));
     }
 
