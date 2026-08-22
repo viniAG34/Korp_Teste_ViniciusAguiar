@@ -163,3 +163,90 @@ public sealed class TransitionInvoiceIssuanceHandler(
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
+
+public enum ApplyStockResultStatus { Applied, Duplicate, EquivalentTerminal }
+
+public sealed record ApplyStockResultCommand(
+    Guid MessageId, string MessageType, int SchemaVersion, Guid CorrelationId, Guid? CausationId,
+    string PayloadHash, Guid ProcessId, Guid InvoiceId, IssuanceTransitionKind Kind,
+    string? OutcomeCode = null, string? OutcomeDescription = null);
+
+public sealed class ApplyStockResultHandler(
+    IBillingUnitOfWorkFactory unitOfWorkFactory,
+    TimeProvider timeProvider,
+    IBillingTelemetry telemetry)
+{
+    public async Task<ApplyStockResultStatus> HandleAsync(
+        ApplyStockResultCommand command, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { return await ApplyAsync(command, cancellationToken); }
+            catch (BillingConcurrencyException) when (attempt < 2) { }
+        }
+    }
+
+    private async Task<ApplyStockResultStatus> ApplyAsync(
+        ApplyStockResultCommand command, CancellationToken cancellationToken)
+    {
+        await using var unit = await unitOfWorkFactory.CreateAsync(cancellationToken);
+        var known = await unit.GetProcessedMessageAsync(command.MessageId, cancellationToken);
+        if (known is not null)
+        {
+            if (!string.Equals(known.PayloadHash, command.PayloadHash, StringComparison.OrdinalIgnoreCase))
+                throw new BillingMessageIntegrityException();
+            return ApplyStockResultStatus.Duplicate;
+        }
+
+        var process = await unit.GetProcessByIdAsync(command.ProcessId, cancellationToken)
+            ?? throw new BillingConsistencyException("Issuance process was not found.");
+        if (process.InvoiceId != command.InvoiceId)
+            throw new BillingConsistencyException("Issuance process and invoice do not match.");
+        var invoice = await unit.GetInvoiceAsync(command.InvoiceId, cancellationToken)
+            ?? throw new BillingConsistencyException("Issuance invoice was not found.");
+
+        var terminal = process.Status is InvoiceIssuanceProcessStatus.Completed
+            or InvoiceIssuanceProcessStatus.Rejected or InvoiceIssuanceProcessStatus.ManualIntervention;
+        var equivalent = IsEquivalent(process, command);
+        if (terminal && !equivalent) throw new BillingResultContradictionException();
+
+        var now = timeProvider.GetUtcNow();
+        unit.AddProcessedMessage(new(command.MessageId, command.MessageType, command.SchemaVersion,
+            command.CorrelationId, command.CausationId, command.PayloadHash, now));
+        if (!terminal)
+        {
+            switch (command.Kind)
+            {
+                case IssuanceTransitionKind.Completed:
+                    invoice.CompleteIssuance(now); process.Complete(now); break;
+                case IssuanceTransitionKind.Rejected:
+                    invoice.RejectIssuance(now); process.Reject(command.OutcomeCode!, command.OutcomeDescription, now); break;
+                case IssuanceTransitionKind.ManualIntervention:
+                    invoice.KeepBlockedForManualIntervention(now);
+                    process.RequireManualIntervention(command.OutcomeCode!, command.OutcomeDescription, now); break;
+                default: throw new BillingConsistencyException("Unsupported stock result transition.");
+            }
+        }
+
+        await unit.CommitAsync(cancellationToken);
+        if (!terminal) telemetry.IssuanceTransitioned(process.Status.ToString());
+        return terminal ? ApplyStockResultStatus.EquivalentTerminal : ApplyStockResultStatus.Applied;
+    }
+
+    private static bool IsEquivalent(InvoiceIssuanceProcess process, ApplyStockResultCommand command) =>
+        (process.Status, command.Kind) switch
+        {
+            (InvoiceIssuanceProcessStatus.Completed, IssuanceTransitionKind.Completed) => true,
+            (InvoiceIssuanceProcessStatus.Rejected, IssuanceTransitionKind.Rejected) =>
+                SameOutcome(process, command),
+            (InvoiceIssuanceProcessStatus.ManualIntervention, IssuanceTransitionKind.ManualIntervention) =>
+                SameOutcome(process, command),
+            _ => false
+        };
+
+    private static bool SameOutcome(InvoiceIssuanceProcess process, ApplyStockResultCommand command) =>
+        string.Equals(process.OutcomeCode, command.OutcomeCode?.Trim(), StringComparison.Ordinal)
+        && string.Equals(process.OutcomeDescription,
+            string.IsNullOrWhiteSpace(command.OutcomeDescription) ? null : command.OutcomeDescription.Trim(),
+            StringComparison.Ordinal);
+}

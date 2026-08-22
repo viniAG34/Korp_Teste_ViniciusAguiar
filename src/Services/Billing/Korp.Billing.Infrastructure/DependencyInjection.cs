@@ -39,12 +39,18 @@ public static class DependencyInjection
         services.AddOptions<OutboxOptions>()
             .Bind(configuration.GetSection(OutboxOptions.SectionName))
             .ValidateDataAnnotations().ValidateOnStart();
+        services.AddOptions<ConsumerOptions>()
+            .Bind(configuration.GetSection(ConsumerOptions.SectionName))
+            .ValidateDataAnnotations().ValidateOnStart();
         services.AddSingleton<IRabbitMqConnection, RabbitMqConnection>();
         services.AddSingleton<RabbitMqTopologyState>();
         services.AddHostedService<RabbitMqTopologyInitializer>();
         services.AddSingleton<IOutboxStore, BillingOutboxStore>();
         services.AddSingleton<IOutboxPublisher, RabbitMqOutboxPublisher>();
         services.AddHostedService<OutboxDispatcher>();
+        services.AddScoped<StockDeductionResultMessageProcessor>();
+        services.AddSingleton<BillingRabbitMqDeliveryForwarder>();
+        services.AddHostedService<BillingStockDeductionResultConsumer>();
         services.AddScoped<CreateInvoiceHandler>();
         services.AddScoped<GetInvoiceByIdHandler>();
         services.AddScoped<ListInvoicesHandler>();
@@ -54,6 +60,7 @@ public static class DependencyInjection
         services.AddScoped<PrintInvoiceHandler>();
         services.AddScoped<GetIssuanceProcessHandler>();
         services.AddScoped<TransitionInvoiceIssuanceHandler>();
+        services.AddScoped<ApplyStockResultHandler>();
         return services;
     }
 }

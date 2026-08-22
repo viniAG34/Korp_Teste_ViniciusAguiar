@@ -217,8 +217,10 @@ public sealed class BillingHandlerBranchTests
         public Task<Invoice?> GetInvoiceAsync(Guid invoiceId, CancellationToken cancellationToken) => Task.FromResult(invoice);
         public Task<InvoiceIssuanceProcess?> GetProcessByIdAsync(Guid processId, CancellationToken cancellationToken) => Task.FromResult(Process);
         public Task<InvoiceIssuanceProcess?> GetProcessByKeyAsync(Guid idempotencyKey, CancellationToken cancellationToken) => Task.FromResult(Process);
+        public Task<ProcessedBillingMessage?> GetProcessedMessageAsync(Guid messageId, CancellationToken cancellationToken) => Task.FromResult<ProcessedBillingMessage?>(null);
         public void AddProcess(InvoiceIssuanceProcess value) => Process = value;
         public void AddOutbox(StockDeductionOutboxRequest request) => Outbox = request;
+        public void AddProcessedMessage(ProcessedBillingMessageRequest request) { }
         public Task CommitAsync(CancellationToken cancellationToken) { CommitCount++; return Task.CompletedTask; }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

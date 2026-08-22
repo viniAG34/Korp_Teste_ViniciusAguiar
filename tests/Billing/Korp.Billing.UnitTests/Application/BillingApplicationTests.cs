@@ -120,8 +120,10 @@ public sealed class BillingApplicationTests
         public Task<Invoice?> GetInvoiceAsync(Guid invoiceId, CancellationToken cancellationToken) => Task.FromResult<Invoice?>(invoice);
         public Task<InvoiceIssuanceProcess?> GetProcessByIdAsync(Guid processId, CancellationToken cancellationToken) => Task.FromResult<InvoiceIssuanceProcess?>(process);
         public Task<InvoiceIssuanceProcess?> GetProcessByKeyAsync(Guid idempotencyKey, CancellationToken cancellationToken) => Task.FromResult<InvoiceIssuanceProcess?>(process);
+        public Task<ProcessedBillingMessage?> GetProcessedMessageAsync(Guid messageId, CancellationToken cancellationToken) => Task.FromResult<ProcessedBillingMessage?>(null);
         public void AddProcess(InvoiceIssuanceProcess value) { }
         public void AddOutbox(StockDeductionOutboxRequest request) { }
+        public void AddProcessedMessage(ProcessedBillingMessageRequest request) { }
         public Task CommitAsync(CancellationToken cancellationToken) { CommitCount++; return Task.CompletedTask; }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }

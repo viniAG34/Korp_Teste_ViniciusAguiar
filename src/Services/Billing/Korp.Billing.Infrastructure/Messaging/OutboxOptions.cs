@@ -15,3 +15,9 @@ public sealed class OutboxOptions
     [Range(100, 60_000)] public int PollingIntervalMilliseconds { get; init; } = 1_000;
     [Range(5, 600)] public int LeaseSeconds { get; init; } = 60;
 }
+
+public sealed class ConsumerOptions
+{
+    public const string SectionName = "Messaging:Consumer";
+    [Range(1, 100)] public ushort PrefetchCount { get; init; } = 1;
+}

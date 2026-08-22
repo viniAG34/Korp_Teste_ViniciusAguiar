@@ -286,3 +286,19 @@ Próximo marco: consumer idempotente do Inventory e transação conjunta de sald
 - regressão integral: 167 testes aprovados, 0 falhas e 0 ignorados.
 
 Próximo marco: consumer de resultados no Billing.
+
+### Marco 4 - Concluído em 2026-08-22
+
+- consumer único do Billing para `StockDeductionCompleted`, `StockDeductionRejected` e `StockDeductionProcessingFailed`;
+- validação estrita de propriedades, envelope, versão, produtor, correlação, payload e SHA-256 dos bytes recebidos;
+- Inbox, Invoice e InvoiceIssuanceProcess confirmados na mesma transação local;
+- resultados em `Pending` são aplicados sem depender da marcação posterior `AwaitingStock`;
+- conclusão fecha e desbloqueia; rejeição mantém aberta e desbloqueia; falha técnica terminal mantém aberta e bloqueada;
+- duplicata íntegra recebe ACK sem novo efeito e identificador com hash divergente segue como falha determinística;
+- resultado terminal equivalente registra nova Inbox sem repetir efeito; resultado contraditório preserva o terminal e segue para DLQ;
+- conflitos otimistas descartam o contexto e são reavaliados até três vezes antes da classificação transitória;
+- acknowledgment manual ocorre somente após commit ou encaminhamento confirmado;
+- TST-DST-013 e TST-DST-014 possuem evidência direta em PostgreSQL real; a prova ponta a ponta pelo broker permanece no Marco 7;
+- regressão integral: 170 testes aprovados, 0 falhas e 0 ignorados; o projeto Gateway permanece sem testes descobertos.
+
+Próximo marco: retry completo, DLQ e produção segura de `StockDeductionProcessingFailed`.

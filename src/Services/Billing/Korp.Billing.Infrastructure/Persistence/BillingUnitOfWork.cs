@@ -23,9 +23,19 @@ public sealed class BillingUnitOfWork(
         context.InvoiceIssuanceProcesses.SingleOrDefaultAsync(process => process.Id == processId, cancellationToken);
 
     public Task<InvoiceIssuanceProcess?> GetProcessByKeyAsync(Guid idempotencyKey, CancellationToken cancellationToken) =>
-        context.InvoiceIssuanceProcesses.SingleOrDefaultAsync(process => process.IdempotencyKey == idempotencyKey, cancellationToken);
+            context.InvoiceIssuanceProcesses.SingleOrDefaultAsync(process => process.IdempotencyKey == idempotencyKey, cancellationToken);
+
+    public Task<ProcessedBillingMessage?> GetProcessedMessageAsync(Guid messageId, CancellationToken cancellationToken) =>
+        context.InboxMessages.AsNoTracking().Where(message => message.MessageId == messageId)
+            .Select(message => new ProcessedBillingMessage(message.MessageId, message.PayloadHash))
+            .SingleOrDefaultAsync(cancellationToken);
 
     public void AddProcess(InvoiceIssuanceProcess process) => context.InvoiceIssuanceProcesses.Add(process);
+
+    public void AddProcessedMessage(ProcessedBillingMessageRequest request) =>
+        context.InboxMessages.Add(InboxMessage.Create(request.MessageId, request.MessageType,
+            request.SchemaVersion, request.CorrelationId, request.CausationId,
+            request.PayloadHash, request.ProcessedAtUtc));
 
     public void AddOutbox(StockDeductionOutboxRequest request)
     {

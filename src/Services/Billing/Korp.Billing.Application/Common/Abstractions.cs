@@ -23,6 +23,12 @@ public sealed class BillingConcurrencyException(Exception? innerException = null
 public sealed class BillingConsistencyException(string message, Exception? innerException = null)
     : Exception(message, innerException);
 
+public sealed class BillingMessageIntegrityException()
+    : Exception("A message identifier was reused with different content.");
+
+public sealed class BillingResultContradictionException()
+    : Exception("The received result contradicts the terminal issuance state.");
+
 public enum BillingConstraint
 {
     ProductAlreadyAdded,
