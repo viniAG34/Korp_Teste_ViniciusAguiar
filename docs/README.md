@@ -90,7 +90,7 @@ A lista abaixo é uma proposta inicial. Títulos, divisão e dependências podem
 | 04 | [`SDD-04-IDENTITY-SERVICE.md`](SDD-04-IDENTITY-SERVICE.md) | Usuários, login, JWT e políticas de autorização | Validado | SDD-02, SDD-03 | Gate C aprovado em 2026-08-21 |
 | 05 | [`SDD-05-INVENTORY-SERVICE.md`](SDD-05-INVENTORY-SERVICE.md) | Produtos, saldos e movimentações | Validado | SDD-02, SDD-03, SDD-04 | Gate C aprovado em 2026-08-21 |
 | 06 | [`SDD-06-BILLING-SERVICE.md`](SDD-06-BILLING-SERVICE.md) | Notas, itens, estados e impressão | Validado | SDD-02, SDD-03, SDD-04, SDD-05 | Gate C aprovado em 2026-08-21 |
-| 07 | [`SDD-07-EMISSAO-E-CONSISTENCIA-DISTRIBUIDA.md`](SDD-07-EMISSAO-E-CONSISTENCIA-DISTRIBUIDA.md) | Emissão, baixa, falhas, idempotência e concorrência | Em implementação | SDD-05, SDD-06 | Gate B aprovado; Marco 1 concluído |
+| 07 | [`SDD-07-EMISSAO-E-CONSISTENCIA-DISTRIBUIDA.md`](SDD-07-EMISSAO-E-CONSISTENCIA-DISTRIBUIDA.md) | Emissão, baixa, falhas, idempotência e concorrência | Em implementação | SDD-05, SDD-06 | Gate B aprovado; Marcos 1 e 2 concluídos |
 | 08 | [`SDD-08-API-GATEWAY.md`](SDD-08-API-GATEWAY.md) | Entrada única, roteamento, autenticação e políticas transversais | Aprovado | SDD-03, SDD-04, SDD-05, SDD-06, SDD-07 | Gate A aprovado |
 | 09 | [`SDD-09-FRONTEND-ANGULAR.md`](SDD-09-FRONTEND-ANGULAR.md) | Telas, sessão, estado, feedback e integração | Aprovado | SDD-03 a SDD-08 | Gate A aprovado |
 | 10 | [`SDD-10-TESTES.md`](SDD-10-TESTES.md) | Estratégia e infraestrutura de testes | Aprovado | SDD-01 a SDD-09 | Gate A aprovado |

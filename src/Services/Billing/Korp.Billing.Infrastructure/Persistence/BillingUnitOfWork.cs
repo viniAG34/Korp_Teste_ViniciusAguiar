@@ -34,7 +34,7 @@ public sealed class BillingUnitOfWork(
             request.Items.Select(item => new StockDeductionRequestItemV1(item.ProductId, item.Quantity)).ToArray());
         var envelope = new IntegrationEventEnvelope<StockDeductionRequestedV1>(
             request.MessageId, IntegrationEventTypes.StockDeductionRequested, 1,
-            request.OccurredAtUtc, request.CorrelationId, null, "billing-service", payload);
+            request.OccurredAtUtc, request.CorrelationId, null, IntegrationEventProducers.Billing, payload);
         var json = JsonSerializer.Serialize(envelope, JsonSerializerOptions.Web);
         context.OutboxMessages.Add(OutboxMessage.Create(
             request.MessageId, IntegrationEventTypes.StockDeductionRequested, 1,

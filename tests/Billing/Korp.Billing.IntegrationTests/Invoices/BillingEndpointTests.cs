@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text.Json;
 using Korp.Billing.Api.Features.Invoices.Contracts;
 using Korp.Billing.Api.Features.Issuance.Contracts;
 using Korp.Billing.Api.Http;
@@ -103,6 +104,8 @@ public sealed class BillingEndpointTests : IAsyncLifetime
             Assert.True(invoice.IsIssuanceInProgress);
             Assert.Equal(correlation, outbox.CorrelationId);
             Assert.Contains(process.Id.ToString("D"), outbox.Payload, StringComparison.OrdinalIgnoreCase);
+            using var envelope = JsonDocument.Parse(outbox.Payload);
+            Assert.Equal("billing", envelope.RootElement.GetProperty("producer").GetString());
         }
 
         using var replayRequest = CreatePrintRequest(created.Id, key, prePrintEtag!, Guid.NewGuid());

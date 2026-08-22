@@ -253,3 +253,19 @@ O Gate C somente será recomendado quando os 22 critérios tiverem evidência ob
 - regressão integral: 153 testes aprovados, 0 falhas e 0 ignorados.
 
 Próximo marco: Outbox e publicação confirmada.
+
+### Marco 2 - Concluído em 2026-08-22
+
+- dispatchers independentes para as Outboxes de Billing e Inventory;
+- reserva de até 50 registros com `FOR UPDATE SKIP LOCKED`, lease único por lote e `xmin` explícito;
+- canal exclusivo e duradouro por publisher, com confirms rastreados, `mandatory = true` e timeout de cinco segundos;
+- payload persistido publicado sem reconstrução, com metadados e headers validados;
+- `ACK` do broker marca a Outbox do Billing e `Pending -> AwaitingStock` na mesma transação local;
+- `BasicReturn/NO_ROUTE`, timeout, NACK e falhas técnicas não marcam publicação como concluída;
+- backoff de Outbox validado em `1, 2, 4, 8, 16, 30...` segundos;
+- ciclo do dispatcher retoma após indisponibilidade temporária de banco ou broker;
+- divergência anterior de `producer = billing-service` corrigida para o contrato aprovado `billing`;
+- TST-DST-004 e TST-DST-005 possuem evidência parcial direta; janelas de crash e NACK explícito permanecem para a prova de resiliência;
+- regressão integral: 163 testes aprovados, 0 falhas e 0 ignorados.
+
+Próximo marco: consumer idempotente do Inventory e transação conjunta de saldo, movimentos, Inbox e Outbox.

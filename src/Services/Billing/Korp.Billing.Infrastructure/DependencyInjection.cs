@@ -33,9 +33,18 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(RabbitMqOptions.SectionName))
             .ValidateDataAnnotations()
             .ValidateOnStart();
+        services.AddOptions<PublisherOptions>()
+            .Bind(configuration.GetSection(PublisherOptions.SectionName))
+            .ValidateDataAnnotations().ValidateOnStart();
+        services.AddOptions<OutboxOptions>()
+            .Bind(configuration.GetSection(OutboxOptions.SectionName))
+            .ValidateDataAnnotations().ValidateOnStart();
         services.AddSingleton<IRabbitMqConnection, RabbitMqConnection>();
         services.AddSingleton<RabbitMqTopologyState>();
         services.AddHostedService<RabbitMqTopologyInitializer>();
+        services.AddSingleton<IOutboxStore, BillingOutboxStore>();
+        services.AddSingleton<IOutboxPublisher, RabbitMqOutboxPublisher>();
+        services.AddHostedService<OutboxDispatcher>();
         services.AddScoped<CreateInvoiceHandler>();
         services.AddScoped<GetInvoiceByIdHandler>();
         services.AddScoped<ListInvoicesHandler>();
