@@ -135,3 +135,27 @@ services:
         condition: service_healthy
     command: dotnet test Korp.Erp.sln --configuration Release
     profiles: [persistence-tests]
+
+  distributed-tests:
+    image: mcr.microsoft.com/dotnet/sdk:10.0.302
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    environment:
+      INVENTORY_TEST_CONNECTION: Host=inventory-db-test;Database=inventory_db;Username=inventory;Password=inventory_test_password
+      BILLING_TEST_CONNECTION: Host=billing-db-test;Database=billing_db;Username=billing;Password=billing_test_password
+      RABBITMQ_TEST_HOST: rabbitmq-test
+      RABBITMQ_TEST_PORT: 5672
+      RABBITMQ_TEST_MANAGEMENT_PORT: 15672
+      RABBITMQ_TEST_VHOST: /korp-tests
+      RABBITMQ_TEST_USERNAME: korp_test
+      RABBITMQ_TEST_PASSWORD: korp_test_password
+    depends_on:
+      inventory-db-test:
+        condition: service_healthy
+      billing-db-test:
+        condition: service_healthy
+      rabbitmq-test:
+        condition: service_healthy
+    command: dotnet test tests/Distributed/Korp.Distributed.IntegrationTests/Korp.Distributed.IntegrationTests.csproj --configuration Release
+    profiles: [persistence-tests]

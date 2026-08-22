@@ -148,7 +148,8 @@ public sealed partial class InventoryStockDeductionConsumer(
                 state.SetConsumerRunning(true);
                 try
                 {
-                    await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
+                    while (channel.IsOpen)
+                        await Task.Delay(250, stoppingToken);
                 }
                 finally
                 {

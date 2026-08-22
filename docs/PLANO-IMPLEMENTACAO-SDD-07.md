@@ -334,3 +334,28 @@ Próximo marco: health checks, observabilidade e encerramento controlado.
 - build completo sem erros ou avisos e regressão serializada: 179 testes aprovados, 0 falhas e 0 ignorados; o projeto Gateway permanece sem testes descobertos.
 
 Próximo marco: prova distribuída, falhas dirigidas, cobertura e Gate C.
+
+### Marco 7 - Implementado em 2026-08-22; Gate C aguardando aprovação
+
+- projeto `Korp.Distributed.IntegrationTests` separado dos serviços de produção;
+- runner `distributed-tests` incorporado ao perfil de persistência do Docker Compose;
+- dois hosts independentes usam exclusivamente seus bancos próprios e RabbitMQ para integração;
+- fluxo Billing -> RabbitMQ -> Inventory -> RabbitMQ -> Billing comprovado com invoice fechada, saldo reduzido e movimento único;
+- janela de crash após publish e antes de `PublishedAtUtc` simulada por perda da confirmação local;
+- republicação com o mesmo `MessageId` confirmada sem segunda baixa ou segunda Inbox técnica;
+- TST-DST-006 e TST-DST-025 possuem evidência direta no ambiente distribuído real.
+- TST-DST-015 comprova retorno após TTL real, preservação da identidade e definições fixas de 5, 30 e 120 segundos;
+- TST-DST-017 remove a rota de retry, exige falha confirmada do publish e comprova a entrega original recuperável após `NACK requeue=true`;
+- TST-DST-021 interrompe o consumer com transação bloqueada no PostgreSQL e comprova rollback, ausência de efeitos e redelivery sem ACK;
+- suíte distribuída atual: 4 testes aprovados, 0 falhas e 0 ignorados;
+- regressão serializada instrumentada: 179 testes aprovados, 0 falhas e 0 ignorados;
+- a consolidação normaliza raízes distintas dos arquivos Cobertura e exclui somente migrations, `obj`, factories de design e bootstrap declarativo já autorizados;
+- cobertura manual aplicável: Billing API 87,86%, Application 90,88%, Domain 96,86% e Infrastructure 80,09%; Inventory API 86,02%, Application 97,55%, Domain 96,64% e Infrastructure 80,48%;
+- teste direcionado da falha de Outbox confirma liberação do lease, tentativa, erro estável e backoff persistido;
+- indisponibilidade de Inventory e Billing preserva as mensagens nas filas e o fluxo conclui quando cada serviço inicia;
+- interrupção das conexões pelo próprio RabbitMQ revelou e passou a cobrir a recriação do ciclo dos consumers após recuperação;
+- regressão final serializada: 180 testes aprovados, 0 falhas e 0 ignorados; suíte distribuída: 7 aprovados.
+
+Relatório de implementação: os critérios aplicáveis do SDD-07 possuem provas unitárias, de integração com PostgreSQL/RabbitMQ reais, de arquitetura e distribuídas. TST-DST-004 e TST-DST-005 permanecem classificados como evidência parcial porque suas garantias estão divididas entre provas específicas, sem um teste monolítico adicional. Todos os oito assemblies backend aplicáveis superam 80% de line coverage; branch coverage foi publicada nos relatórios Cobertura. O projeto Gateway continua sem testes descobertos, condição preexistente e fora do escopo do SDD-07. Não foram adicionadas dependências de produção.
+
+Próximo ponto-chave: revisão das evidências e decisão do engenheiro sobre o Gate C do SDD-07.

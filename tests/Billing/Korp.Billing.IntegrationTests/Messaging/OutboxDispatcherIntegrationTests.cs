@@ -127,6 +127,34 @@ public sealed class OutboxDispatcherIntegrationTests : IAsyncLifetime
         }
     }
 
+    [Fact]
+    public async Task FailedPublicationReleasesLeaseAndSchedulesApprovedBackoff()
+    {
+        var occurredAt = DateTimeOffset.UtcNow;
+        var retryAt = occurredAt.AddSeconds(10);
+        await using (var setup = CreateContext())
+        {
+            setup.OutboxMessages.Add(CreateOutbox(
+                Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), occurredAt));
+            await setup.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        var store = CreateStore();
+        var delivery = Assert.Single(await store.ClaimAsync(
+            occurredAt.AddSeconds(1), TestContext.Current.CancellationToken));
+        await store.RecordFailureAsync(delivery, "publish_failed:sentinel", retryAt,
+            TestContext.Current.CancellationToken);
+
+        await using var verification = CreateContext();
+        var message = await verification.OutboxMessages.SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(1, message.AttemptCount);
+        Assert.Equal("publish_failed:sentinel", message.LastError);
+        Assert.True((message.NextAttemptAtUtc - retryAt.AddSeconds(1)).Duration() < TimeSpan.FromMilliseconds(1));
+        Assert.Null(message.LockId);
+        Assert.Null(message.LockedUntilUtc);
+        Assert.Null(message.PublishedAtUtc);
+    }
+
     [Theory]
     [InlineData(1, 1)]
     [InlineData(2, 2)]
