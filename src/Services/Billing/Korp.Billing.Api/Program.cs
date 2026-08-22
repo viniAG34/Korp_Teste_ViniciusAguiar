@@ -3,6 +3,7 @@ using Korp.Billing.Api.Errors;
 using Korp.Billing.Api.Features.Invoices;
 using Korp.Billing.Api.Features.Issuance;
 using Korp.Billing.Api.Http;
+using Korp.Billing.Api.Health;
 using Korp.Billing.Api.Observability;
 using Korp.Billing.Api.ProductCatalog;
 using Korp.Billing.Api.Security;
@@ -13,12 +14,14 @@ using Korp.Billing.Infrastructure.ProductCatalog;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.Configure<HostOptions>(options => options.ShutdownTimeout = TimeSpan.FromSeconds(30));
 builder.Services.AddOpenApi();
 builder.Services.ConfigureHttpJsonOptions(options => ApiJsonOptions.Configure(options.SerializerOptions));
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<BillingExceptionHandler>();
 builder.Services.AddBillingSecurity(builder.Configuration);
 builder.Services.AddBillingInfrastructure(builder.Configuration);
+builder.Services.AddBillingHealthChecks();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ForwardAuthorizationHandler>();
 builder.Services.AddHttpClient<IProductCatalogClient, ProductCatalogClient>(client =>
@@ -41,6 +44,7 @@ app.UseAuthorization();
 app.MapOpenApi();
 app.MapInvoiceEndpoints();
 app.MapIssuanceEndpoints();
+app.MapServiceHealthChecks();
 
 app.Run();
 

@@ -6,36 +6,31 @@ using RabbitMQ.Client.Exceptions;
 
 namespace Korp.Billing.Infrastructure.Messaging;
 
-public sealed class RabbitMqTopologyState
-{
-    public bool IsDeclared { get; internal set; }
-    public bool IsIncompatible { get; internal set; }
-}
-
 public sealed partial class RabbitMqTopologyInitializer(
     IRabbitMqConnection connection,
     IOptions<RabbitMqOptions> options,
-    RabbitMqTopologyState state,
+    MessagingOperationalState state,
     ILogger<RabbitMqTopologyInitializer> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!options.Value.Enabled) return;
 
-        while (!stoppingToken.IsCancellationRequested && !state.IsIncompatible)
+        while (!stoppingToken.IsCancellationRequested && !state.IsTopologyIncompatible)
         {
             try
             {
                 var current = await connection.GetAsync(stoppingToken);
                 await using var channel = await current.CreateChannelAsync(cancellationToken: stoppingToken);
                 await DeclareAsync(channel, stoppingToken);
-                state.IsDeclared = true;
+                state.SetTopologyDeclared(true);
                 Log.TopologyDeclared(logger);
                 return;
             }
             catch (OperationInterruptedException exception) when (exception.ShutdownReason?.ReplyCode == 406)
             {
-                state.IsIncompatible = true;
+                state.SetTopologyDeclared(false);
+                state.SetTopologyIncompatible();
                 Log.TopologyIncompatible(logger, exception.ShutdownReason.ReplyCode);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -44,7 +39,7 @@ public sealed partial class RabbitMqTopologyInitializer(
             }
             catch (Exception exception)
             {
-                state.IsDeclared = false;
+                state.SetTopologyDeclared(false);
                 Log.ConnectionUnavailable(logger, exception.GetType().Name);
                 await Task.Delay(TimeSpan.FromSeconds(options.Value.NetworkRecoveryIntervalSeconds), stoppingToken);
             }

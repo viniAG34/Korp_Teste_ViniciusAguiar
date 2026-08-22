@@ -14,6 +14,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 
@@ -262,6 +264,39 @@ public sealed class BillingEndpointTests : IAsyncLifetime
         Assert.Contains("/api/v1/invoice-issuance-processes/{processId}", document, StringComparison.Ordinal);
         Assert.DoesNotContain("/cancel", document, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("/pdf", document, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task TstDst022HealthEndpointsSeparateHttpReadinessFromMessagingDependencies()
+    {
+        var live = await _client.GetAsync("/health/live", TestContext.Current.CancellationToken);
+        var ready = await _client.GetAsync("/health/ready", TestContext.Current.CancellationToken);
+        var dependencies = await _client.GetAsync("/health/dependencies", TestContext.Current.CancellationToken);
+        var liveBody = await live.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var readyBody = await ready.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var dependenciesBody = await dependencies.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, live.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, ready.StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, dependencies.StatusCode);
+        Assert.Contains("self", liveBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("database", liveBody, StringComparison.Ordinal);
+        Assert.Contains("configuration", readyBody, StringComparison.Ordinal);
+        Assert.Contains("database", readyBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("rabbitmq", readyBody, StringComparison.Ordinal);
+        Assert.Contains("rabbitmq", dependenciesBody, StringComparison.Ordinal);
+        Assert.Contains("topology", dependenciesBody, StringComparison.Ordinal);
+        Assert.Contains("dispatcher", dependenciesBody, StringComparison.Ordinal);
+        Assert.Contains("consumer", dependenciesBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("billing_test_password", dependenciesBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("localhost", dependenciesBody, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TstDst021HostUsesApprovedShutdownDeadline()
+    {
+        var options = _factory.Services.GetRequiredService<IOptions<HostOptions>>().Value;
+        Assert.Equal(TimeSpan.FromSeconds(30), options.ShutdownTimeout);
     }
 
     private async Task<InvoiceResponse> CreateInvoiceAsync()

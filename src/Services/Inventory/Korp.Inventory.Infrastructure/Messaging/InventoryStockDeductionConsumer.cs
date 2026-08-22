@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text;
 using Korp.Inventory.Application.Stock;
 using Microsoft.Extensions.Hosting;
@@ -116,19 +117,20 @@ public sealed class RabbitMqDeliveryForwarder(
 
 public sealed partial class InventoryStockDeductionConsumer(
     IRabbitMqConnection connection,
-    RabbitMqTopologyState topology,
+    MessagingOperationalState state,
     IServiceScopeFactory scopeFactory,
     RabbitMqDeliveryForwarder forwarder,
     IOptions<RabbitMqOptions> rabbitOptions,
     IOptions<ConsumerOptions> consumerOptions,
+    MessagingMetrics metrics,
     ILogger<InventoryStockDeductionConsumer> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!rabbitOptions.Value.Enabled) return;
-        while (!stoppingToken.IsCancellationRequested && !topology.IsIncompatible)
+        while (!stoppingToken.IsCancellationRequested && !state.IsTopologyIncompatible)
         {
-            if (!topology.IsDeclared)
+            if (!state.IsTopologyDeclared)
             {
                 await Task.Delay(500, stoppingToken);
                 continue;
@@ -143,12 +145,22 @@ public sealed partial class InventoryStockDeductionConsumer(
                 consumer.ReceivedAsync += async (_, delivery) =>
                     await HandleAsync(channel, delivery, stoppingToken);
                 var tag = await channel.BasicConsumeAsync(RabbitMqTopology.InventoryQueue, false, consumer, stoppingToken);
-                await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
-                await channel.BasicCancelAsync(tag, false, stoppingToken);
+                state.SetConsumerRunning(true);
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, stoppingToken);
+                }
+                finally
+                {
+                    state.SetConsumerRunning(false);
+                    if (channel.IsOpen)
+                        await channel.BasicCancelAsync(tag, false, CancellationToken.None);
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
             catch (Exception exception)
             {
+                state.SetConsumerRunning(false);
                 Log.ConsumerFailed(logger, exception.GetType().Name);
                 await Task.Delay(TimeSpan.FromSeconds(rabbitOptions.Value.NetworkRecoveryIntervalSeconds), stoppingToken);
             }
@@ -157,6 +169,9 @@ public sealed partial class InventoryStockDeductionConsumer(
 
     private async Task HandleAsync(IChannel channel, BasicDeliverEventArgs delivery, CancellationToken cancellationToken)
     {
+        var started = Stopwatch.GetTimestamp();
+        var messageType = delivery.BasicProperties.Type ?? "unknown";
+        Log.MessageReceived(logger, delivery.BasicProperties.MessageId ?? string.Empty, messageType);
         var forwarding = false;
         try
         {
@@ -165,6 +180,8 @@ public sealed partial class InventoryStockDeductionConsumer(
             {
                 forwarding = true;
                 await forwarder.ForwardAsync(delivery, 0, true, "invalid_retry_header", cancellationToken);
+                metrics.RecordDeadLetter("invalid_retry_header");
+                Log.MessageDeadLettered(logger, delivery.BasicProperties.MessageId ?? string.Empty, "invalid_retry_header");
                 forwarding = false;
                 await channel.BasicAckAsync(delivery.DeliveryTag, false, cancellationToken);
                 return;
@@ -183,8 +200,19 @@ public sealed partial class InventoryStockDeductionConsumer(
                 forwarding = true;
                 await forwarder.ForwardAsync(delivery, retryCount, true,
                     result.FailureCode ?? "deterministic_failure", cancellationToken);
+                metrics.RecordDeadLetter(result.FailureCode ?? "deterministic_failure");
+                Log.IntegrityViolation(logger, delivery.BasicProperties.MessageId ?? string.Empty,
+                    result.FailureCode ?? "deterministic_failure");
+                Log.MessageDeadLettered(logger, delivery.BasicProperties.MessageId ?? string.Empty,
+                    result.FailureCode ?? "deterministic_failure");
                 forwarding = false;
             }
+            if (result.Outcome == StockDeductionProcessingOutcome.Duplicate)
+            {
+                metrics.RecordDuplicate();
+                Log.DuplicateIgnored(logger, delivery.BasicProperties.MessageId ?? string.Empty);
+            }
+            metrics.RecordConsumed(messageType, result.Outcome.ToString(), Stopwatch.GetElapsedTime(started));
             await channel.BasicAckAsync(delivery.DeliveryTag, false, cancellationToken);
             Log.MessageProcessed(logger, delivery.BasicProperties.MessageId ?? string.Empty, result.Outcome.ToString());
         }
@@ -221,6 +249,13 @@ public sealed partial class InventoryStockDeductionConsumer(
                 await forwarder.ForwardAsync(delivery, retryCount, false,
                     retryCount >= 3 ? "processing_outcome_inconclusive" : "transient_processing_failure",
                     cancellationToken);
+                if (retryCount >= 3)
+                {
+                    metrics.RecordDeadLetter("processing_outcome_inconclusive");
+                    Log.MessageDeadLettered(logger, delivery.BasicProperties.MessageId ?? string.Empty,
+                        "processing_outcome_inconclusive");
+                }
+                else metrics.RecordRetry(retryCount + 1);
                 forwarding = false;
                 await channel.BasicAckAsync(delivery.DeliveryTag, false, cancellationToken);
                 Log.MessageRetried(logger, delivery.BasicProperties.MessageId ?? string.Empty,
@@ -248,5 +283,13 @@ public sealed partial class InventoryStockDeductionConsumer(
         public static partial void MessageRetried(ILogger logger, string messageId, int attempt, string @event = "message_retried");
         [LoggerMessage(7203, LogLevel.Warning, "Inventory consumer cycle failed. Event={Event} FailureType={FailureType}")]
         public static partial void ConsumerFailed(ILogger logger, string failureType, string @event = "rabbitmq_connection_changed");
+        [LoggerMessage(7204, LogLevel.Debug, "Message received. Event={Event} MessageId={MessageId} MessageType={MessageType}")]
+        public static partial void MessageReceived(ILogger logger, string messageId, string messageType, string @event = "message_received");
+        [LoggerMessage(7205, LogLevel.Information, "Duplicate message ignored. Event={Event} MessageId={MessageId}")]
+        public static partial void DuplicateIgnored(ILogger logger, string messageId, string @event = "duplicate_message_ignored");
+        [LoggerMessage(7206, LogLevel.Warning, "Message integrity violation. Event={Event} MessageId={MessageId} ErrorCode={ErrorCode}")]
+        public static partial void IntegrityViolation(ILogger logger, string messageId, string errorCode, string @event = "message_integrity_violation");
+        [LoggerMessage(7207, LogLevel.Warning, "Message dead-lettered. Event={Event} MessageId={MessageId} ErrorCode={ErrorCode}")]
+        public static partial void MessageDeadLettered(ILogger logger, string messageId, string errorCode, string @event = "message_dead_lettered");
     }
 }

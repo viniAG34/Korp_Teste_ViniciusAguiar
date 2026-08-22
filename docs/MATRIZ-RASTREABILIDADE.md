@@ -313,7 +313,7 @@ O relatório `RELATORIO-IMPLEMENTACAO-SDD-06.md` registra resultados, percentuai
 | QLT-001 a QLT-004 | Unitários, integração real, E2E e cobertura mínima | Todos | TST-DST-001 a TST-DST-025 |
 | QLT-005 a QLT-008 | Limites arquiteturais, rastreabilidade, dados protegidos e execução reproduzível | CA-DST-02, CA-DST-03, CA-DST-20 a CA-DST-22 | TST-DST-001, TST-DST-002, TST-DST-021 a TST-DST-025 |
 
-O SDD-07 possui Gate A e Gate B aprovados. Os Marcos 1 a 5 implementaram topologia, Outbox confirmada, consumers idempotentes, retry limitado, DLQs e encerramento técnico seguro. TST-DST-001, TST-DST-002, TST-DST-007 a TST-DST-014, TST-DST-016 e a regra central de TST-DST-018 possuem evidências reais; TST-DST-004, TST-DST-005 e as provas temporais/de falha dirigida do retry possuem evidência parcial. A regressão do quinto marco aprovou 173 testes sem falhas. Crash dirigido, health, lifecycle e fluxo distribuído ponta a ponta permanecem nos marcos seguintes.
+O SDD-07 possui Gate A e Gate B aprovados. Os Marcos 1 a 6 implementaram topologia, Outbox confirmada, consumers idempotentes, retry limitado, DLQs, estados operacionais, health sanitizado, logs, métricas e prazo de shutdown. TST-DST-001, TST-DST-002, TST-DST-007 a TST-DST-014, TST-DST-016, a regra central de TST-DST-018, TST-DST-022 e a instrumentação de TST-DST-023 possuem evidências reais; TST-DST-004, TST-DST-005, TST-DST-021 e as provas temporais/de falha dirigida possuem evidência parcial. A regressão serializada do sexto marco aprovou 179 testes sem falhas. Crash dirigido, shutdown durante processamento, inspeção integral de logs e fluxo distribuído ponta a ponta permanecem no Marco 7.
 
 ---
 

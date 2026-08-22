@@ -318,3 +318,19 @@ Próximo marco: retry completo, DLQ e produção segura de `StockDeductionProces
 - regressão integral: 173 testes aprovados, 0 falhas e 0 ignorados; builds finais de Billing e Inventory sem erros ou avisos.
 
 Próximo marco: health checks, observabilidade e encerramento controlado.
+
+### Marco 6 - Concluído em 2026-08-22
+
+- estado operacional thread-safe compartilhado por topologia, dispatcher e consumer em Billing e Inventory;
+- `/health/live` limitado ao processo, sem consulta a banco ou RabbitMQ;
+- `/health/ready` valida configuração, banco próprio e migrations pendentes sem tornar RabbitMQ requisito HTTP;
+- `/health/dependencies` apresenta separadamente banco, RabbitMQ, topologia, dispatcher e consumer;
+- respostas de health sanitizadas, contendo somente nome e estado de cada check;
+- shutdown do host configurado explicitamente para 30 segundos, preservando cancelamento e descarte natural de entregas sem ACK e leases não concluídos;
+- logs mínimos de recebimento, processamento, retry, DLQ, duplicidade e violação de integridade usam campos permitidos e códigos estáveis;
+- catálogo de métricas implementado com labels de baixa cardinalidade, incluindo snapshot real da Outbox e estado da conexão;
+- TST-DST-022 possui evidência direta nas duas APIs e TST-DST-023 inspeciona instrumentos e labels dos dois serviços;
+- TST-DST-021 confirma o prazo configurado; a interrupção dirigida durante handler/publicação permanece para o Marco 7;
+- build completo sem erros ou avisos e regressão serializada: 179 testes aprovados, 0 falhas e 0 ignorados; o projeto Gateway permanece sem testes descobertos.
+
+Próximo marco: prova distribuída, falhas dirigidas, cobertura e Gate C.

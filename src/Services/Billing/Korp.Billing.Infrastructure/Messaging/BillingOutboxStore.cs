@@ -11,10 +11,12 @@ namespace Korp.Billing.Infrastructure.Messaging;
 
 public sealed record OutboxDelivery(Guid Id, Guid LockId, string MessageType, int SchemaVersion,
     string Payload, Guid CorrelationId, Guid? CausationId, DateTimeOffset OccurredAtUtc, int AttemptCount);
+public sealed record OutboxSnapshot(long PendingMessages, double OldestAgeSeconds);
 
 public interface IOutboxStore
 {
     Task<IReadOnlyList<OutboxDelivery>> ClaimAsync(DateTimeOffset now, CancellationToken cancellationToken);
+    Task<OutboxSnapshot> GetSnapshotAsync(DateTimeOffset now, CancellationToken cancellationToken);
     Task MarkPublishedAsync(OutboxDelivery delivery, DateTimeOffset now, CancellationToken cancellationToken);
     Task RecordFailureAsync(OutboxDelivery delivery, string failureDescription, DateTimeOffset now, CancellationToken cancellationToken);
 }
@@ -23,6 +25,15 @@ public sealed class BillingOutboxStore(
     IDbContextFactory<BillingDbContext> factory,
     IOptions<OutboxOptions> options) : IOutboxStore
 {
+    public async Task<OutboxSnapshot> GetSnapshotAsync(DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        await using var context = await factory.CreateDbContextAsync(cancellationToken);
+        var query = context.OutboxMessages.AsNoTracking().Where(message => message.PublishedAtUtc == null);
+        var count = await query.LongCountAsync(cancellationToken);
+        var oldest = await query.MinAsync(message => (DateTimeOffset?)message.OccurredAtUtc, cancellationToken);
+        return new OutboxSnapshot(count, oldest is null ? 0 : Math.Max(0, (now - oldest.Value).TotalSeconds));
+    }
+
     public async Task<IReadOnlyList<OutboxDelivery>> ClaimAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
         await using var context = await factory.CreateDbContextAsync(cancellationToken);

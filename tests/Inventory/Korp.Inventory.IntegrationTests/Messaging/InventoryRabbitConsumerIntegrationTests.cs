@@ -59,7 +59,7 @@ public sealed class InventoryRabbitConsumerIntegrationTests : IAsyncLifetime
         }
         hostedServices = provider.GetServices<IHostedService>().ToArray();
         foreach (var service in hostedServices) await service.StartAsync(TestContext.Current.CancellationToken);
-        await WaitUntilAsync(() => provider.GetRequiredService<RabbitMqTopologyState>().IsDeclared);
+        await WaitUntilAsync(() => provider.GetRequiredService<MessagingOperationalState>().IsTopologyDeclared);
     }
 
     [Fact]

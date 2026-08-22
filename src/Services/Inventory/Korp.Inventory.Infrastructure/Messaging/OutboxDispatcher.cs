@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -7,26 +8,32 @@ namespace Korp.Inventory.Infrastructure.Messaging;
 public sealed partial class OutboxDispatcher(
     IOutboxStore store,
     IOutboxPublisher publisher,
-    RabbitMqTopologyState topology,
+    MessagingOperationalState state,
     IOptions<RabbitMqOptions> rabbitOptions,
     IOptions<OutboxOptions> outboxOptions,
     TimeProvider timeProvider,
+    MessagingMetrics metrics,
     ILogger<OutboxDispatcher> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (!rabbitOptions.Value.Enabled) return;
-        while (!stoppingToken.IsCancellationRequested)
+        state.SetDispatcherRunning(true);
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                if (!topology.IsDeclared)
+                try
                 {
-                    await WaitAsync(stoppingToken);
-                    continue;
-                }
+                    if (!state.IsTopologyDeclared)
+                    {
+                        await WaitAsync(stoppingToken);
+                        continue;
+                    }
 
-                var deliveries = await store.ClaimAsync(timeProvider.GetUtcNow(), stoppingToken);
+                var now = timeProvider.GetUtcNow();
+                metrics.UpdateOutboxSnapshot(await store.GetSnapshotAsync(now, stoppingToken));
+                var deliveries = await store.ClaimAsync(now, stoppingToken);
                 if (deliveries.Count == 0)
                 {
                     await WaitAsync(stoppingToken);
@@ -36,15 +43,18 @@ public sealed partial class OutboxDispatcher(
                 Log.BatchClaimed(logger, deliveries.Count, deliveries[0].LockId);
                 foreach (var delivery in deliveries)
                 {
+                    var started = Stopwatch.GetTimestamp();
                     try
                     {
                         await publisher.PublishAsync(delivery, stoppingToken);
                         await store.MarkPublishedAsync(delivery, timeProvider.GetUtcNow(), stoppingToken);
+                        metrics.RecordPublication("published", Stopwatch.GetElapsedTime(started));
                         Log.MessagePublished(logger, delivery.Id, delivery.CorrelationId, delivery.MessageType);
                     }
                     catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
                     catch (Exception exception)
                     {
+                        metrics.RecordPublication("failed", Stopwatch.GetElapsedTime(started));
                         var failure = $"publish_failed:{exception.GetType().Name}";
                         await store.RecordFailureAsync(delivery, failure, timeProvider.GetUtcNow(), stoppingToken);
                         Log.PublishFailed(logger, delivery.Id, delivery.CorrelationId, delivery.MessageType,
@@ -52,13 +62,15 @@ public sealed partial class OutboxDispatcher(
                     }
                 }
             }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
-            catch (Exception exception)
-            {
-                Log.DispatchCycleFailed(logger, exception.GetType().Name);
-                await WaitAsync(stoppingToken);
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
+                catch (Exception exception)
+                {
+                    Log.DispatchCycleFailed(logger, exception.GetType().Name);
+                    await WaitAsync(stoppingToken);
+                }
             }
         }
+        finally { state.SetDispatcherRunning(false); }
     }
 
     private Task WaitAsync(CancellationToken cancellationToken) =>

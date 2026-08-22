@@ -42,7 +42,8 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(ConsumerOptions.SectionName))
             .ValidateDataAnnotations().ValidateOnStart();
         services.AddSingleton<IRabbitMqConnection, RabbitMqConnection>();
-        services.AddSingleton<RabbitMqTopologyState>();
+        services.AddSingleton<MessagingOperationalState>();
+        services.AddSingleton<MessagingMetrics>();
         services.AddHostedService<RabbitMqTopologyInitializer>();
         services.AddSingleton<IOutboxStore, InventoryOutboxStore>();
         services.AddSingleton<IOutboxPublisher, RabbitMqOutboxPublisher>();
