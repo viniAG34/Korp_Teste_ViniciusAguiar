@@ -110,9 +110,123 @@ public sealed class BillingEndpointTests : IAsyncLifetime
         var replay = await replayResponse.Content.ReadFromJsonAsync<InvoiceIssuanceProcessResponse>(ApiJsonOptions.Create(), TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.Accepted, replayResponse.StatusCode);
         Assert.Equal(process.Id, replay!.Id);
+        var processQuery = await _client.GetAsync($"/api/v1/invoice-issuance-processes/{process.Id:D}",
+            TestContext.Current.CancellationToken);
+        var queried = await processQuery.Content.ReadFromJsonAsync<InvoiceIssuanceProcessResponse>(
+            ApiJsonOptions.Create(), TestContext.Current.CancellationToken);
+        Assert.Equal(process.Id, queried!.Id);
         await using var replayScope = _factory.Services.CreateAsyncScope();
         var replayContext = replayScope.ServiceProvider.GetRequiredService<BillingDbContext>();
         Assert.Equal(1, await replayContext.OutboxMessages.CountAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task DetailListUpdateAndRemoveRespectEtagAndStableContracts()
+    {
+        Authorize("Admin");
+        var (invoice, item, etag) = await CreateInvoiceWithItemAsync();
+
+        var detailResponse = await _client.GetAsync($"/api/v1/invoices/{invoice.Id:D}", TestContext.Current.CancellationToken);
+        var listResponse = await _client.GetAsync("/api/v1/invoices?pageNumber=1&pageSize=20", TestContext.Current.CancellationToken);
+        var page = await listResponse.Content.ReadFromJsonAsync<InvoicePageResponse>(ApiJsonOptions.Create(), TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
+        Assert.Single(page!.Items);
+        Assert.Equal(1, page.Items[0].ItemCount);
+
+        using var update = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/invoices/{invoice.Id:D}/items/{item.Id:D}")
+        { Content = JsonContent.Create(new UpdateInvoiceItemRequest(4)) };
+        update.Headers.TryAddWithoutValidation("If-Match", etag);
+        var updatedResponse = await _client.SendAsync(update, TestContext.Current.CancellationToken);
+        var updated = await updatedResponse.Content.ReadFromJsonAsync<InvoiceResponse>(ApiJsonOptions.Create(), TestContext.Current.CancellationToken);
+        var updatedEtag = updatedResponse.Headers.ETag!.Tag;
+        Assert.Equal(4, updated!.Items.Single().Quantity);
+
+        using var stale = new HttpRequestMessage(HttpMethod.Put, $"/api/v1/invoices/{invoice.Id:D}/items/{item.Id:D}")
+        { Content = JsonContent.Create(new UpdateInvoiceItemRequest(5)) };
+        stale.Headers.TryAddWithoutValidation("If-Match", etag);
+        Assert.Equal(HttpStatusCode.PreconditionFailed,
+            (await _client.SendAsync(stale, TestContext.Current.CancellationToken)).StatusCode);
+
+        using var remove = new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/invoices/{invoice.Id:D}/items/{item.Id:D}");
+        remove.Headers.TryAddWithoutValidation("If-Match", updatedEtag);
+        var removed = await _client.SendAsync(remove, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NoContent, removed.StatusCode);
+        Assert.NotNull(removed.Headers.ETag);
+    }
+
+    [Fact]
+    public async Task InvalidRoutesBodiesPagingAndPrintHeadersAreRejectedBeforeEffects()
+    {
+        Authorize("Admin");
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await _client.GetAsync("/api/v1/invoices/not-a-guid", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await _client.GetAsync("/api/v1/invoices?pageNumber=0&pageSize=101", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await _client.GetAsync("/api/v1/invoice-issuance-processes/not-a-guid", TestContext.Current.CancellationToken)).StatusCode);
+
+        var invoice = await CreateInvoiceAsync();
+        using var invalidItem = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/invoices/{invoice.Id:D}/items")
+        { Content = JsonContent.Create(new AddInvoiceItemRequest(Guid.Empty, 0)) };
+        invalidItem.Headers.TryAddWithoutValidation("If-Match", (await GetInvoiceEtag(invoice.Id)));
+        Assert.Equal(HttpStatusCode.BadRequest,
+            (await _client.SendAsync(invalidItem, TestContext.Current.CancellationToken)).StatusCode);
+
+        using var missingKey = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/invoices/{invoice.Id:D}/print");
+        missingKey.Headers.TryAddWithoutValidation("If-Match", await GetInvoiceEtag(invoice.Id));
+        var missingKeyResponse = await _client.SendAsync(missingKey, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, missingKeyResponse.StatusCode);
+        Assert.Contains("idempotency_key_required",
+            await missingKeyResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EmptyInvoiceCannotPrintAndViewerCannotMutate()
+    {
+        Authorize("Admin");
+        var invoice = await CreateInvoiceAsync();
+        var etag = await GetInvoiceEtag(invoice.Id);
+        using var print = CreatePrintRequest(invoice.Id, Guid.NewGuid(), etag, Guid.NewGuid());
+        var empty = await _client.SendAsync(print, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Conflict, empty.StatusCode);
+        Assert.Contains("invoice_empty", await empty.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
+
+        Authorize("Viewer");
+        var forbidden = await _client.PostAsync("/api/v1/invoices", null, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+    }
+
+    [Fact]
+    public async Task ConcurrentPrintRequestsPreserveIdempotencyAndSingleActiveProcess()
+    {
+        Authorize("Admin");
+        var (sameInvoice, _, sameEtag) = await CreateInvoiceWithItemAsync();
+        var sharedKey = Guid.NewGuid();
+        using var sameFirst = CreatePrintRequest(sameInvoice.Id, sharedKey, sameEtag, Guid.NewGuid());
+        using var sameSecond = CreatePrintRequest(sameInvoice.Id, sharedKey, sameEtag, Guid.NewGuid());
+        var sameResponses = await Task.WhenAll(
+            _client.SendAsync(sameFirst, TestContext.Current.CancellationToken),
+            _client.SendAsync(sameSecond, TestContext.Current.CancellationToken));
+        Assert.All(sameResponses, response => Assert.Equal(HttpStatusCode.Accepted, response.StatusCode));
+        var firstProcess = await sameResponses[0].Content.ReadFromJsonAsync<InvoiceIssuanceProcessResponse>(
+            ApiJsonOptions.Create(), TestContext.Current.CancellationToken);
+        var secondProcess = await sameResponses[1].Content.ReadFromJsonAsync<InvoiceIssuanceProcessResponse>(
+            ApiJsonOptions.Create(), TestContext.Current.CancellationToken);
+        Assert.Equal(firstProcess!.Id, secondProcess!.Id);
+
+        var (differentInvoice, _, differentEtag) = await CreateInvoiceWithItemAsync();
+        using var differentFirst = CreatePrintRequest(differentInvoice.Id, Guid.NewGuid(), differentEtag, Guid.NewGuid());
+        using var differentSecond = CreatePrintRequest(differentInvoice.Id, Guid.NewGuid(), differentEtag, Guid.NewGuid());
+        var differentResponses = await Task.WhenAll(
+            _client.SendAsync(differentFirst, TestContext.Current.CancellationToken),
+            _client.SendAsync(differentSecond, TestContext.Current.CancellationToken));
+        Assert.Single(differentResponses, response => response.StatusCode == HttpStatusCode.Accepted);
+        Assert.Single(differentResponses, response => response.StatusCode == HttpStatusCode.Conflict);
+
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<BillingDbContext>();
+        Assert.Equal(2, await context.OutboxMessages.CountAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(2, await context.InvoiceIssuanceProcesses.CountAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -152,6 +266,27 @@ public sealed class BillingEndpointTests : IAsyncLifetime
         var response = await _client.PostAsync("/api/v1/invoices", null, TestContext.Current.CancellationToken);
         response.EnsureSuccessStatusCode();
         return (await response.Content.ReadFromJsonAsync<InvoiceResponse>(ApiJsonOptions.Create(), TestContext.Current.CancellationToken))!;
+    }
+
+    private async Task<(InvoiceResponse Invoice, InvoiceItemResponse Item, string Etag)> CreateInvoiceWithItemAsync()
+    {
+        var invoice = await CreateInvoiceAsync();
+        var etag = await GetInvoiceEtag(invoice.Id);
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/invoices/{invoice.Id:D}/items")
+        { Content = JsonContent.Create(new AddInvoiceItemRequest(ProductId, 2)) };
+        request.Headers.TryAddWithoutValidation("If-Match", etag);
+        var response = await _client.SendAsync(request, TestContext.Current.CancellationToken);
+        response.EnsureSuccessStatusCode();
+        var updated = (await response.Content.ReadFromJsonAsync<InvoiceResponse>(
+            ApiJsonOptions.Create(), TestContext.Current.CancellationToken))!;
+        return (updated, updated.Items.Single(), response.Headers.ETag!.Tag);
+    }
+
+    private async Task<string> GetInvoiceEtag(Guid invoiceId)
+    {
+        var response = await _client.GetAsync($"/api/v1/invoices/{invoiceId:D}", TestContext.Current.CancellationToken);
+        response.EnsureSuccessStatusCode();
+        return response.Headers.ETag!.Tag;
     }
 
     private static HttpRequestMessage CreatePrintRequest(Guid invoiceId, Guid key, string etag, Guid correlation)

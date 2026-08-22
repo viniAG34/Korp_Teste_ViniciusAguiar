@@ -1,3 +1,4 @@
+using Korp.Billing.Api.Correlation;
 using Korp.Billing.Api.Features.Invoices.Contracts;
 using Korp.Billing.Api.Security;
 using Korp.Billing.Application.Invoices;
@@ -7,6 +8,13 @@ namespace Korp.Billing.Api.Features.Invoices;
 
 public static class InvoiceEndpoints
 {
+    private static readonly Action<ILogger, Guid, long, Guid, Guid, Exception?> LogInvoiceCreated =
+        LoggerMessage.Define<Guid, long, Guid, Guid>(LogLevel.Information, new EventId(3001, "InvoiceCreated"),
+            "Invoice created: {InvoiceId} {InvoiceNumber} by {CreatedByUserId}; correlation {CorrelationId}");
+    private static readonly Action<ILogger, string, Guid, Guid, Guid, Exception?> LogItemChanged =
+        LoggerMessage.Define<string, Guid, Guid, Guid>(LogLevel.Information, new EventId(3002, "InvoiceItemChanged"),
+            "Invoice item operation {Operation}: invoice {InvoiceId}, item {InvoiceItemId}, correlation {CorrelationId}");
+
     public static IEndpointRouteBuilder MapInvoiceEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapPost("/api/v1/invoices", CreateAsync).WithName("CreateInvoice").WithTags("Invoices")
@@ -29,6 +37,8 @@ public static class InvoiceEndpoints
         if (!AuthenticationExtensions.TryGetUserId(context.User, out var userId)) return Unauthorized(context);
         var invoice = await handler.HandleAsync(new CreateInvoiceCommand(userId), token);
         InvoiceEndpointResults.SetEtag(context, invoice.Version);
+        LogInvoiceCreated(context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("InvoiceCreated"),
+            invoice.Id, invoice.Number, userId, CorrelationMiddleware.Get(context), null);
         return Results.Created($"/api/v1/invoices/{invoice.Id:D}", InvoiceResponseMapper.Map(invoice));
     }
 
@@ -61,7 +71,8 @@ public static class InvoiceEndpoints
         var errors = ValidateItem(request.ProductId, request.Quantity);
         if (errors.Count > 0) return Validation(context, errors);
         var result = await handler.HandleAsync(new AddInvoiceItemCommand(id, request.ProductId, request.Quantity, version), token);
-        return MutationResponse(context, result);
+        return MutationResponse(context, result, "add",
+            result.Invoice?.Items.Single(item => item.ProductId == request.ProductId).Id ?? Guid.Empty);
     }
 
     private static async Task<IResult> UpdateItemAsync(string invoiceId, string itemId, UpdateInvoiceItemRequest request,
@@ -72,7 +83,7 @@ public static class InvoiceEndpoints
         if (!InvoiceEndpointResults.TryExpectedVersion(context, out var version, out error)) return error!;
         if (request.Quantity <= 0) return Validation(context, new Dictionary<string, string[]> { ["quantity"] = ["A quantidade deve ser maior que zero."] });
         var result = await handler.HandleAsync(new UpdateInvoiceItemQuantityCommand(id, parsedItemId, request.Quantity, version), token);
-        return MutationResponse(context, result);
+        return MutationResponse(context, result, "update", parsedItemId);
     }
 
     private static async Task<IResult> RemoveItemAsync(string invoiceId, string itemId,
@@ -84,13 +95,18 @@ public static class InvoiceEndpoints
         var result = await handler.HandleAsync(new RemoveInvoiceItemCommand(id, parsedItemId, version), token);
         if (result.Status != InvoiceMutationStatus.Success) return InvoiceEndpointResults.MutationFailure(context, result.Status);
         InvoiceEndpointResults.SetEtag(context, result.Invoice!.Version);
+        LogItemChanged(context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("InvoiceItemChanged"),
+            "remove", result.Invoice.Id, parsedItemId, CorrelationMiddleware.Get(context), null);
         return Results.NoContent();
     }
 
-    private static IResult MutationResponse(HttpContext context, InvoiceMutationResult result)
+    private static IResult MutationResponse(
+        HttpContext context, InvoiceMutationResult result, string operation, Guid invoiceItemId)
     {
         if (result.Status != InvoiceMutationStatus.Success) return InvoiceEndpointResults.MutationFailure(context, result.Status);
         InvoiceEndpointResults.SetEtag(context, result.Invoice!.Version);
+        LogItemChanged(context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("InvoiceItemChanged"),
+            operation, result.Invoice.Id, invoiceItemId, CorrelationMiddleware.Get(context), null);
         return Results.Ok(InvoiceResponseMapper.Map(result.Invoice));
     }
 

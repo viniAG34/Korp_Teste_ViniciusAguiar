@@ -14,6 +14,7 @@ public interface IIssuanceProcessReadService
 {
     Task<PersistedIssuanceProcess?> GetByIdAsync(Guid processId, CancellationToken cancellationToken);
     Task<PersistedIssuanceProcess?> GetByIdempotencyKeyAsync(Guid idempotencyKey, CancellationToken cancellationToken);
+    Task<PersistedIssuanceProcess?> GetActiveByInvoiceIdAsync(Guid invoiceId, CancellationToken cancellationToken);
 }
 
 public sealed record StockDeductionOutboxRequest(

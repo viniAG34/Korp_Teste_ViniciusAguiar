@@ -9,6 +9,10 @@ namespace Korp.Billing.Api.Features.Issuance;
 
 public static class IssuanceEndpoints
 {
+    private static readonly Action<ILogger, Guid, Guid, Guid, Guid, Exception?> LogIssuanceAccepted =
+        LoggerMessage.Define<Guid, Guid, Guid, Guid>(LogLevel.Information, new EventId(3010, "InvoiceIssuanceAccepted"),
+            "Invoice issuance accepted: invoice {InvoiceId}, process {IssuanceProcessId}, user {RequestedByUserId}, correlation {CorrelationId}");
+
     public static IEndpointRouteBuilder MapIssuanceEndpoints(this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapPost("/api/v1/invoices/{invoiceId}/print", PrintAsync).WithName("PrintInvoice").WithTags("Issuance")
@@ -39,6 +43,9 @@ public static class IssuanceEndpoints
         InvoiceEndpointResults.SetEtag(context, process.InvoiceVersion);
         if (process.RetryAfterSeconds is { } retry) context.Response.Headers.RetryAfter = retry.ToString(System.Globalization.CultureInfo.InvariantCulture);
         var response = InvoiceResponseMapper.Map(process);
+        if (result.Status == PrintInvoiceStatus.Accepted)
+            LogIssuanceAccepted(context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("InvoiceIssuanceAccepted"),
+                id, process.Id, userId, CorrelationMiddleware.Get(context), null);
         return result.Status is PrintInvoiceStatus.Accepted or PrintInvoiceStatus.ReplayedActive
             ? Results.Json(response, statusCode: 202)
             : Results.Ok(response);

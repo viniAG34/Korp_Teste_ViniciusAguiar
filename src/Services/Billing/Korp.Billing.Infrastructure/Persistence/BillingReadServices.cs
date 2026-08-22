@@ -49,6 +49,12 @@ public sealed class IssuanceProcessReadService(BillingDbContext context) : IIssu
         Project(context.InvoiceIssuanceProcesses.AsNoTracking().Where(process => process.IdempotencyKey == idempotencyKey))
             .SingleOrDefaultAsync(cancellationToken);
 
+    public Task<PersistedIssuanceProcess?> GetActiveByInvoiceIdAsync(Guid invoiceId, CancellationToken cancellationToken) =>
+        Project(context.InvoiceIssuanceProcesses.AsNoTracking().Where(process => process.InvoiceId == invoiceId
+            && (process.Status == Domain.Issuance.InvoiceIssuanceProcessStatus.Pending
+                || process.Status == Domain.Issuance.InvoiceIssuanceProcessStatus.AwaitingStock)))
+            .SingleOrDefaultAsync(cancellationToken);
+
     private IQueryable<PersistedIssuanceProcess> Project(IQueryable<Domain.Issuance.InvoiceIssuanceProcess> processes) =>
         from process in processes
         join invoice in context.Invoices.AsNoTracking() on process.InvoiceId equals invoice.Id

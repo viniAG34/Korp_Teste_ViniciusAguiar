@@ -103,6 +103,8 @@ public sealed class BillingApplicationTests
         public Task<PersistedIssuanceProcess?> GetByIdAsync(Guid processId, CancellationToken cancellationToken) => Task.FromResult(process);
         public Task<PersistedIssuanceProcess?> GetByIdempotencyKeyAsync(Guid idempotencyKey, CancellationToken cancellationToken) =>
             Task.FromResult(process?.IdempotencyKey == idempotencyKey ? process : null);
+        public Task<PersistedIssuanceProcess?> GetActiveByInvoiceIdAsync(Guid invoiceId, CancellationToken cancellationToken) =>
+            Task.FromResult(process?.InvoiceId == invoiceId && process.Status is InvoiceIssuanceProcessStatus.Pending or InvoiceIssuanceProcessStatus.AwaitingStock ? process : null);
     }
 
     private sealed class UnitFactoryFake(IBillingUnitOfWork? unit) : IBillingUnitOfWorkFactory

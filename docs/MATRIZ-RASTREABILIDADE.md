@@ -278,7 +278,22 @@ O relatório `RELATORIO-IMPLEMENTACAO-SDD-05.md` registra comandos, percentuais,
 | QLT-001 a QLT-004 | Testes unitários, integração real e cobertura | Todos | TST-BIL-001 a TST-BIL-039 |
 | QLT-006 a QLT-008 | Rastreabilidade, segurança e comportamento verificável | CA-BIL-23 a CA-BIL-28 | TST-BIL-034 a TST-BIL-039 |
 
-O SDD-06 possui Gate A aprovado. Implementações e evidências reais serão adicionadas somente na macroetapa de implementação.
+### Evidência de implementação do SDD-06
+
+| Requisitos | Evidência implementada | Estado |
+|---|---|---|
+| OBR-006, OBR-009 | Cliente HTTP de Inventory, snapshot validado, itens, ETag e mutações HTTP | Verificado por testes unitários, de contrato e API/PostgreSQL |
+| OBR-007, OBR-008, OBR-018 | Sequence real, criação, estados, projeções e ownership exclusivo | Verificado por migration, arquitetura, domínio e API |
+| OBR-011 | Processo consultável, `isDelayed` e `Retry-After` | Backend verificado; polling visual permanece no SDD-09 |
+| OBR-012, OBR-013 | Transições internas, bloqueio e fechamento testáveis | Domínio/Application verificados; transporte real permanece no SDD-07 |
+| OPA-002 | Replay, chave global e exclusão mútua com disputas HTTP reais | Verificado com PostgreSQL e requests concorrentes |
+| DIF-002, DIF-003 | JWT local, policies, autoria e propagação de bearer | Verificado por API e handler HTTP controlado |
+| DIF-004, DIF-005 | Outbox atômica, Process Manager e terminais idempotentes | Aceite durável verificado; publisher, Inbox e consumers permanecem no SDD-07 |
+| DIF-006, QLT-005 | Camadas, portas específicas e ausência de escopo fiscal | Verificado por build, arquitetura e inspeção de rotas/esquema |
+| DIF-008, DIF-009 | OpenAPI, correlação, logs estruturados e métricas | Verificado na API; fluxo distribuído completo acumula no SDD-07 |
+| QLT-001 a QLT-004, QLT-008 | 25 testes unitários, 42 integrações, regressão e cobertura por assembly acima de 80% | Verificado; branches publicadas no relatório |
+
+O relatório `RELATORIO-IMPLEMENTACAO-SDD-06.md` registra resultados, percentuais, ocorrências, deferimentos cumulativos e riscos residuais.
 
 ---
 

@@ -58,6 +58,10 @@ public sealed class PrintInvoiceHandler(
         }
         catch (BillingConcurrencyException)
         {
+            var winner = await readService.GetByIdempotencyKeyAsync(command.IdempotencyKey, cancellationToken);
+            if (winner is not null) return Replay(winner, command.InvoiceId);
+            if (await readService.GetActiveByInvoiceIdAsync(command.InvoiceId, cancellationToken) is not null)
+                return new(PrintInvoiceStatus.IssuanceInProgress);
             return new(PrintInvoiceStatus.VersionMismatch);
         }
 
