@@ -335,7 +335,7 @@ Próximo marco: health checks, observabilidade e encerramento controlado.
 
 Próximo marco: prova distribuída, falhas dirigidas, cobertura e Gate C.
 
-### Marco 7 - Implementado em 2026-08-22; Gate C aguardando aprovação
+### Marco 7 - Concluído em 2026-08-22; Gate C aprovado
 
 - projeto `Korp.Distributed.IntegrationTests` separado dos serviços de produção;
 - runner `distributed-tests` incorporado ao perfil de persistência do Docker Compose;
@@ -358,4 +358,6 @@ Próximo marco: prova distribuída, falhas dirigidas, cobertura e Gate C.
 
 Relatório de implementação: os critérios aplicáveis do SDD-07 possuem provas unitárias, de integração com PostgreSQL/RabbitMQ reais, de arquitetura e distribuídas. TST-DST-004 e TST-DST-005 permanecem classificados como evidência parcial porque suas garantias estão divididas entre provas específicas, sem um teste monolítico adicional. Todos os oito assemblies backend aplicáveis superam 80% de line coverage; branch coverage foi publicada nos relatórios Cobertura. O projeto Gateway continua sem testes descobertos, condição preexistente e fora do escopo do SDD-07. Não foram adicionadas dependências de produção.
 
-Próximo ponto-chave: revisão das evidências e decisão do engenheiro sobre o Gate C do SDD-07.
+Gate C aprovado pelo engenheiro em 2026-08-22. Evidências e limitações consolidadas em `RELATORIO-IMPLEMENTACAO-SDD-07.md`.
+
+Próximo passo: elaborar o Gate B do SDD-08 - API Gateway.
