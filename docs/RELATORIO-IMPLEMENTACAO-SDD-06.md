@@ -1,8 +1,9 @@
 # Relatório de Implementação - SDD-06
 
 > Gate: C - Conclusão
-> Status: Em revisão pelo engenheiro
+> Status: Aprovado pelo engenheiro
 > Data: 2026-08-21
+> Gate C aprovado em: 2026-08-21
 > SDD: `SDD-06-BILLING-SERVICE.md`
 > Plano: `PLANO-IMPLEMENTACAO-SDD-06.md`
 

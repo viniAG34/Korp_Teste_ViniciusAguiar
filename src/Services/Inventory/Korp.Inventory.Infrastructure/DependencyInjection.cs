@@ -2,6 +2,7 @@ using Korp.Inventory.Application.Common;
 using Korp.Inventory.Application.Products;
 using Korp.Inventory.Application.Stock;
 using Korp.Inventory.Infrastructure.Persistence;
+using Korp.Inventory.Infrastructure.Messaging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,6 +28,13 @@ public static class DependencyInjection
         services.AddSingleton<IGuidGenerator, SystemGuidGenerator>();
         services.AddSingleton<IInventoryTelemetry, NullInventoryTelemetry>();
         services.AddSingleton(TimeProvider.System);
+        services.AddOptions<RabbitMqOptions>()
+            .Bind(configuration.GetSection(RabbitMqOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.AddSingleton<IRabbitMqConnection, RabbitMqConnection>();
+        services.AddSingleton<RabbitMqTopologyState>();
+        services.AddHostedService<RabbitMqTopologyInitializer>();
         services.AddScoped<IInventoryUnitOfWorkFactory, InventoryUnitOfWorkFactory>();
         services.AddScoped<CreateProductHandler>();
         services.AddScoped<GetProductByIdHandler>();

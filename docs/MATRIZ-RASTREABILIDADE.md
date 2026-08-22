@@ -313,7 +313,7 @@ O relatório `RELATORIO-IMPLEMENTACAO-SDD-06.md` registra resultados, percentuai
 | QLT-001 a QLT-004 | Unitários, integração real, E2E e cobertura mínima | Todos | TST-DST-001 a TST-DST-025 |
 | QLT-005 a QLT-008 | Limites arquiteturais, rastreabilidade, dados protegidos e execução reproduzível | CA-DST-02, CA-DST-03, CA-DST-20 a CA-DST-22 | TST-DST-001, TST-DST-002, TST-DST-021 a TST-DST-025 |
 
-O SDD-07 possui Gate A aprovado. Implementações e evidências reais serão adicionadas somente na macroetapa de implementação.
+O SDD-07 possui Gate A e Gate B aprovados. O Marco 1 implementou a topologia RabbitMQ e produziu evidência real para TST-DST-001 e TST-DST-002: declaração completa e idempotente em RabbitMQ 4.1.4 e rejeição de recurso incompatível com resposta 406 sem recriação. A regressão do ponto-chave aprovou 153 testes sem falhas. Dispatchers, consumers, retry operacional, health e fluxo distribuído permanecem nos marcos seguintes.
 
 ---
 

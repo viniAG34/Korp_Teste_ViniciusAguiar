@@ -97,6 +97,19 @@ services:
     tmpfs: [/var/lib/postgresql/data]
     profiles: [persistence-tests]
 
+  rabbitmq-test:
+    image: rabbitmq:4.1.4-management
+    environment:
+      RABBITMQ_DEFAULT_USER: korp_test
+      RABBITMQ_DEFAULT_PASS: korp_test_password
+      RABBITMQ_DEFAULT_VHOST: /korp-tests
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, ping]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    profiles: [persistence-tests]
+
   persistence-tests:
     image: mcr.microsoft.com/dotnet/sdk:10.0.302
     working_dir: /workspace
@@ -106,12 +119,19 @@ services:
       IDENTITY_TEST_CONNECTION: Host=identity-db-test;Database=identity_db;Username=identity;Password=identity_test_password
       INVENTORY_TEST_CONNECTION: Host=inventory-db-test;Database=inventory_db;Username=inventory;Password=inventory_test_password
       BILLING_TEST_CONNECTION: Host=billing-db-test;Database=billing_db;Username=billing;Password=billing_test_password
+      RABBITMQ_TEST_HOST: rabbitmq-test
+      RABBITMQ_TEST_PORT: 5672
+      RABBITMQ_TEST_VHOST: /korp-tests
+      RABBITMQ_TEST_USERNAME: korp_test
+      RABBITMQ_TEST_PASSWORD: korp_test_password
     depends_on:
       identity-db-test:
         condition: service_healthy
       inventory-db-test:
         condition: service_healthy
       billing-db-test:
+        condition: service_healthy
+      rabbitmq-test:
         condition: service_healthy
     command: dotnet test Korp.Erp.sln --configuration Release
     profiles: [persistence-tests]

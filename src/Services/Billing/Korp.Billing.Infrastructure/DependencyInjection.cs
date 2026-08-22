@@ -2,6 +2,7 @@ using Korp.Billing.Application.Common;
 using Korp.Billing.Application.Invoices;
 using Korp.Billing.Application.Issuance;
 using Korp.Billing.Infrastructure.Persistence;
+using Korp.Billing.Infrastructure.Messaging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -28,6 +29,13 @@ public static class DependencyInjection
         services.AddSingleton<IGuidGenerator, SystemGuidGenerator>();
         services.AddSingleton<IBillingTelemetry, NullBillingTelemetry>();
         services.AddSingleton(TimeProvider.System);
+        services.AddOptions<RabbitMqOptions>()
+            .Bind(configuration.GetSection(RabbitMqOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.AddSingleton<IRabbitMqConnection, RabbitMqConnection>();
+        services.AddSingleton<RabbitMqTopologyState>();
+        services.AddHostedService<RabbitMqTopologyInitializer>();
         services.AddScoped<CreateInvoiceHandler>();
         services.AddScoped<GetInvoiceByIdHandler>();
         services.AddScoped<ListInvoicesHandler>();
