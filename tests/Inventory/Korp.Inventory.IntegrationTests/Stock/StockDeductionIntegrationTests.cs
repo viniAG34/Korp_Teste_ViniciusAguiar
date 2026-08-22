@@ -1,7 +1,11 @@
+using System.Text.Json;
 using Korp.Inventory.Application.Stock;
 using Korp.Inventory.Domain.Products;
 using Korp.Inventory.Infrastructure;
 using Korp.Inventory.Infrastructure.Persistence;
+using Korp.Inventory.Infrastructure.Messaging;
+using Korp.Integration.Contracts.Events;
+using Korp.Integration.Contracts.StockDeduction.V1;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -50,6 +54,8 @@ public sealed class StockDeductionIntegrationTests : IAsyncLifetime
             .Select(product => product.Balance).ToArrayAsync(TestContext.Current.CancellationToken);
         Assert.Collection(balances, balance => Assert.Equal(3, balance), balance => Assert.Equal(4, balance));
         Assert.Equal(2, await context.StockMovements.CountAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await context.InboxMessages.CountAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await context.OutboxMessages.CountAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -71,6 +77,8 @@ public sealed class StockDeductionIntegrationTests : IAsyncLifetime
             .Select(product => product.Balance).ToArrayAsync(TestContext.Current.CancellationToken);
         Assert.Collection(balances, balance => Assert.Equal(2, balance), balance => Assert.Equal(1, balance));
         Assert.Equal(0, await context.StockMovements.CountAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(2, await context.InboxMessages.CountAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(2, await context.OutboxMessages.CountAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -89,6 +97,8 @@ public sealed class StockDeductionIntegrationTests : IAsyncLifetime
         Assert.Equal(2, await context.Products.Select(candidate => candidate.Balance)
             .SingleAsync(TestContext.Current.CancellationToken));
         Assert.Equal(1, await context.StockMovements.CountAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(2, await context.InboxMessages.CountAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(2, await context.OutboxMessages.CountAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]
@@ -98,8 +108,67 @@ public sealed class StockDeductionIntegrationTests : IAsyncLifetime
         var invoiceId = Guid.NewGuid();
         await HandleAsync(Command(invoiceId, new DeductInvoiceStockItem(product.Id, 1)));
 
-        await Assert.ThrowsAsync<Korp.Inventory.Application.Common.InventoryConsistencyException>(() =>
+        await Assert.ThrowsAsync<Korp.Inventory.Application.Common.InventoryLogicalDivergenceException>(() =>
             HandleAsync(Command(invoiceId, new DeductInvoiceStockItem(product.Id, 2))));
+    }
+
+    [Fact]
+    public async Task TstDst008And009ExactRedeliveryIsAcknowledgableWithoutAnotherEffect()
+    {
+        var product = (await SeedProductsAsync(("P-1", 3))).Single();
+        var delivery = Delivery(Guid.NewGuid(), Guid.NewGuid(), product.Id, 1);
+
+        var first = await ProcessAsync(delivery);
+        var repeated = await ProcessAsync(delivery);
+
+        Assert.Equal(StockDeductionProcessingOutcome.Processed, first.Outcome);
+        Assert.Equal(StockDeductionProcessingOutcome.Duplicate, repeated.Outcome);
+        await using var scope = _provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<InventoryDbContext>();
+        Assert.Equal(2, await context.Products.Select(candidate => candidate.Balance)
+            .SingleAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await context.StockMovements.CountAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await context.InboxMessages.CountAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await context.OutboxMessages.CountAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task TstDst010ReusedMessageIdWithDifferentBodyIsIntegrityFailure()
+    {
+        var product = (await SeedProductsAsync(("P-1", 5))).Single();
+        var messageId = Guid.NewGuid();
+        var invoiceId = Guid.NewGuid();
+        var original = Delivery(messageId, invoiceId, product.Id, 1);
+        var altered = Delivery(messageId, invoiceId, product.Id, 2);
+
+        Assert.Equal(StockDeductionProcessingOutcome.Processed, (await ProcessAsync(original)).Outcome);
+        var result = await ProcessAsync(altered);
+
+        Assert.Equal(StockDeductionProcessingOutcome.DeterministicFailure, result.Outcome);
+        Assert.Equal("message_integrity_violation", result.FailureCode);
+        await using var scope = _provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<InventoryDbContext>();
+        Assert.Equal(4, await context.Products.Select(candidate => candidate.Balance)
+            .SingleAsync(TestContext.Current.CancellationToken));
+        Assert.Equal(1, await context.OutboxMessages.CountAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task InvalidEnvelopeIsDeterministicAndCreatesNoDatabaseEffect()
+    {
+        var delivery = Delivery(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), 1) with
+        {
+            Producer = "unknown"
+        };
+
+        var result = await ProcessAsync(delivery);
+
+        Assert.Equal(StockDeductionProcessingOutcome.DeterministicFailure, result.Outcome);
+        Assert.Equal("invalid_envelope", result.FailureCode);
+        await using var scope = _provider.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<InventoryDbContext>();
+        Assert.Empty(await context.InboxMessages.ToArrayAsync(TestContext.Current.CancellationToken));
+        Assert.Empty(await context.OutboxMessages.ToArrayAsync(TestContext.Current.CancellationToken));
     }
 
     private async Task<Product[]> SeedProductsAsync(params (string Code, int Balance)[] values)
@@ -121,8 +190,29 @@ public sealed class StockDeductionIntegrationTests : IAsyncLifetime
             .HandleAsync(command, TestContext.Current.CancellationToken);
     }
 
+    private async Task<StockDeductionProcessingResult> ProcessAsync(StockDeductionDelivery delivery)
+    {
+        await using var scope = _provider.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<StockDeductionMessageProcessor>()
+            .ProcessAsync(delivery, TestContext.Current.CancellationToken);
+    }
+
+    private static StockDeductionDelivery Delivery(Guid messageId, Guid invoiceId, Guid productId, int quantity)
+    {
+        var correlationId = Guid.NewGuid();
+        var envelope = new IntegrationEventEnvelope<StockDeductionRequestedV1>(messageId,
+            IntegrationEventTypes.StockDeductionRequested, 1, DateTimeOffset.UtcNow,
+            correlationId, null, IntegrationEventProducers.Billing,
+            new StockDeductionRequestedV1(Guid.NewGuid(), invoiceId, 5001, Guid.NewGuid(),
+                [new StockDeductionRequestItemV1(productId, quantity)]));
+        return new StockDeductionDelivery(JsonSerializer.SerializeToUtf8Bytes(envelope, JsonSerializerOptions.Web),
+            messageId.ToString("D"), IntegrationEventTypes.StockDeductionRequested,
+            correlationId.ToString("D"), "application/json", "utf-8", 1,
+            IntegrationEventProducers.Billing);
+    }
+
     private static DeductInvoiceStockCommand Command(
         Guid invoiceId,
         params DeductInvoiceStockItem[] items) =>
-        new(Guid.NewGuid(), Guid.NewGuid(), invoiceId, items);
+        new(Guid.NewGuid(), Guid.NewGuid(), invoiceId, items, Guid.NewGuid(), new string('A', 64));
 }

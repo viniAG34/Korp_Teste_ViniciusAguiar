@@ -10,9 +10,11 @@ public sealed record DeductInvoiceStockCommand(
     Guid EventId,
     Guid IssuanceProcessId,
     Guid InvoiceId,
-    IReadOnlyList<DeductInvoiceStockItem> Items);
+    IReadOnlyList<DeductInvoiceStockItem> Items,
+    Guid CorrelationId,
+    string PayloadHash);
 
-public enum DeductionStatus { Completed, Rejected }
+public enum DeductionStatus { Completed, Rejected, Duplicate }
 public enum DeductionReason { InvalidRequest, ProductNotFound, InsufficientStock }
 
 public sealed record DeductionFailure(Guid ProductId, int RequestedQuantity, int? AvailableBalance = null);
@@ -34,6 +36,10 @@ public sealed record DeductionResult(
 }
 
 public sealed record ExistingDeduction(Guid ProductId, int Quantity);
+public sealed record ProcessedMessage(string PayloadHash);
+public sealed record ProcessedMessageRequest(Guid MessageId, Guid CorrelationId, string PayloadHash, DateTimeOffset ProcessedAtUtc);
+public sealed record StockDeductionResultRequest(Guid MessageId, Guid CorrelationId, Guid CausationId,
+    Guid IssuanceProcessId, Guid InvoiceId, DeductionResult Result, DateTimeOffset OccurredAtUtc);
 
 public interface IInventoryUnitOfWork : IAsyncDisposable
 {
@@ -45,7 +51,10 @@ public interface IInventoryUnitOfWork : IAsyncDisposable
         Guid invoiceId,
         CancellationToken cancellationToken);
 
+    Task<ProcessedMessage?> GetProcessedMessageAsync(Guid messageId, CancellationToken cancellationToken);
     void AddMovement(StockMovement movement);
+    void AddProcessedMessage(ProcessedMessageRequest request);
+    void AddResultOutbox(StockDeductionResultRequest request);
     Task CommitAsync(CancellationToken cancellationToken);
 }
 
@@ -56,6 +65,9 @@ public interface IInventoryUnitOfWorkFactory
 
 public sealed class InventoryConcurrencyException(Exception innerException)
     : Exception("Inventory state changed concurrently.", innerException);
+
+public sealed class InventoryMessageIntegrityException()
+    : Exception("A processed message identifier was reused with different content.");
 
 public sealed class DeductInvoiceStockHandler(
     IInventoryUnitOfWorkFactory unitOfWorkFactory,
@@ -70,30 +82,43 @@ public sealed class DeductInvoiceStockHandler(
         CancellationToken cancellationToken)
     {
         var startedAt = timeProvider.GetTimestamp();
-        var invalid = Validate(command);
-        if (invalid.Count > 0)
-        {
-            telemetry.RecordStockDeduction("rejected", timeProvider.GetElapsedTime(startedAt));
-            return DeductionResult.Rejected(DeductionReason.InvalidRequest, invalid);
-        }
-
-        var requested = command.Items.OrderBy(item => item.ProductId).ToArray();
+        var requested = (command.Items ?? []).OrderBy(item => item.ProductId).ToArray();
         for (var attempt = 1; attempt <= MaximumAttempts; attempt++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             await using var unit = await unitOfWorkFactory.CreateAsync(cancellationToken);
             try
             {
+                var processed = await unit.GetProcessedMessageAsync(command.EventId, cancellationToken);
+                if (processed is not null)
+                {
+                    if (!string.Equals(processed.PayloadHash, command.PayloadHash, StringComparison.Ordinal))
+                        throw new InventoryMessageIntegrityException();
+                    telemetry.RecordStockDeduction("duplicate", timeProvider.GetElapsedTime(startedAt));
+                    return new DeductionResult(DeductionStatus.Duplicate, null, [], attempt);
+                }
+
+                var invalid = Validate(command);
+                if (invalid.Count > 0)
+                {
+                    var rejected = DeductionResult.Rejected(DeductionReason.InvalidRequest, invalid, attempt);
+                    await CommitResultAsync(unit, command, rejected, cancellationToken);
+                    telemetry.RecordStockDeduction("rejected", timeProvider.GetElapsedTime(startedAt));
+                    return rejected;
+                }
+
                 var existing = await unit.GetInvoiceDeductionsAsync(command.InvoiceId, cancellationToken);
                 if (existing.Count > 0)
                 {
                     if (Equivalent(requested, existing))
                     {
+                        var completed = DeductionResult.Completed(attempt);
+                        await CommitResultAsync(unit, command, completed, cancellationToken);
                         telemetry.RecordStockDeduction("completed", timeProvider.GetElapsedTime(startedAt));
-                        return DeductionResult.Completed(attempt);
+                        return completed;
                     }
 
-                    throw new InventoryConsistencyException(
+                    throw new InventoryLogicalDivergenceException(
                         "Existing invoice deductions differ from the requested content.");
                 }
 
@@ -105,8 +130,10 @@ public sealed class DeductInvoiceStockHandler(
                     .ToArray();
                 if (missing.Length > 0)
                 {
+                    var rejected = DeductionResult.Rejected(DeductionReason.ProductNotFound, missing, attempt);
+                    await CommitResultAsync(unit, command, rejected, cancellationToken);
                     telemetry.RecordStockDeduction("rejected", timeProvider.GetElapsedTime(startedAt));
-                    return DeductionResult.Rejected(DeductionReason.ProductNotFound, missing, attempt);
+                    return rejected;
                 }
 
                 var insufficient = requested
@@ -118,8 +145,10 @@ public sealed class DeductInvoiceStockHandler(
                     .ToArray();
                 if (insufficient.Length > 0)
                 {
+                    var rejected = DeductionResult.Rejected(DeductionReason.InsufficientStock, insufficient, attempt);
+                    await CommitResultAsync(unit, command, rejected, cancellationToken);
                     telemetry.RecordStockDeduction("rejected", timeProvider.GetElapsedTime(startedAt));
-                    return DeductionResult.Rejected(DeductionReason.InsufficientStock, insufficient, attempt);
+                    return rejected;
                 }
 
                 var occurredAtUtc = timeProvider.GetUtcNow();
@@ -134,9 +163,10 @@ public sealed class DeductInvoiceStockHandler(
                     unit.AddMovement(movement);
                 }
 
-                await unit.CommitAsync(cancellationToken);
+                var completedResult = DeductionResult.Completed(attempt);
+                await CommitResultAsync(unit, command, completedResult, cancellationToken);
                 telemetry.RecordStockDeduction("completed", timeProvider.GetElapsedTime(startedAt));
-                return DeductionResult.Completed(attempt);
+                return completedResult;
             }
             catch (InventoryConcurrencyException)
             {
@@ -155,11 +185,24 @@ public sealed class DeductInvoiceStockHandler(
             $"Inventory concurrency could not be resolved after {MaximumAttempts} attempts.");
     }
 
+    private async Task CommitResultAsync(IInventoryUnitOfWork unit, DeductInvoiceStockCommand command,
+        DeductionResult result, CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+        unit.AddProcessedMessage(new ProcessedMessageRequest(command.EventId, command.CorrelationId,
+            command.PayloadHash, now));
+        unit.AddResultOutbox(new StockDeductionResultRequest(guidGenerator.NewGuid(), command.CorrelationId,
+            command.EventId, command.IssuanceProcessId, command.InvoiceId, result, now));
+        await unit.CommitAsync(cancellationToken);
+    }
+
     private static List<DeductionFailure> Validate(DeductInvoiceStockCommand command)
     {
         if (command.EventId == Guid.Empty
             || command.IssuanceProcessId == Guid.Empty
             || command.InvoiceId == Guid.Empty
+            || command.CorrelationId == Guid.Empty
+            || command.PayloadHash?.Length != 64
             || command.Items is null
             || command.Items.Count == 0)
         {

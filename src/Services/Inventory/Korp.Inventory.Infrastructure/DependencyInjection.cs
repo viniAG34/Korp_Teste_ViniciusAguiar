@@ -38,12 +38,18 @@ public static class DependencyInjection
         services.AddOptions<OutboxOptions>()
             .Bind(configuration.GetSection(OutboxOptions.SectionName))
             .ValidateDataAnnotations().ValidateOnStart();
+        services.AddOptions<ConsumerOptions>()
+            .Bind(configuration.GetSection(ConsumerOptions.SectionName))
+            .ValidateDataAnnotations().ValidateOnStart();
         services.AddSingleton<IRabbitMqConnection, RabbitMqConnection>();
         services.AddSingleton<RabbitMqTopologyState>();
         services.AddHostedService<RabbitMqTopologyInitializer>();
         services.AddSingleton<IOutboxStore, InventoryOutboxStore>();
         services.AddSingleton<IOutboxPublisher, RabbitMqOutboxPublisher>();
         services.AddHostedService<OutboxDispatcher>();
+        services.AddScoped<StockDeductionMessageProcessor>();
+        services.AddSingleton<RabbitMqDeliveryForwarder>();
+        services.AddHostedService<InventoryStockDeductionConsumer>();
         services.AddScoped<IInventoryUnitOfWorkFactory, InventoryUnitOfWorkFactory>();
         services.AddScoped<CreateProductHandler>();
         services.AddScoped<GetProductByIdHandler>();

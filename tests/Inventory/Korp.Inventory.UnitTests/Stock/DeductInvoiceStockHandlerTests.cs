@@ -42,6 +42,8 @@ public sealed class DeductInvoiceStockHandlerTests
         Assert.Equal(DeductionReason.ProductNotFound, missing.Reason);
         Assert.Equal(1, product.Balance);
         Assert.Empty(missingUnit.Movements);
+        Assert.True(missingUnit.Committed);
+        Assert.NotNull(missingUnit.Result);
 
         var insufficientUnit = new FakeUnit([product]);
         var insufficient = await CreateHandler(new FakeFactory(insufficientUnit)).HandleAsync(
@@ -50,6 +52,7 @@ public sealed class DeductInvoiceStockHandlerTests
         Assert.Equal(DeductionReason.InsufficientStock, insufficient.Reason);
         Assert.Equal(1, insufficient.Failures.Single().AvailableBalance);
         Assert.Equal(1, product.Balance);
+        Assert.True(insufficientUnit.Committed);
     }
 
     [Fact]
@@ -63,7 +66,7 @@ public sealed class DeductInvoiceStockHandlerTests
 
         Assert.Equal(DeductionStatus.Completed, result.Status);
         Assert.Empty(unit.Movements);
-        Assert.False(unit.Committed);
+        Assert.True(unit.Committed);
     }
 
     [Fact]
@@ -72,7 +75,7 @@ public sealed class DeductInvoiceStockHandlerTests
         var productId = Guid.NewGuid();
         var unit = new FakeUnit([], [new ExistingDeduction(productId, 1)]);
 
-        await Assert.ThrowsAsync<InventoryConsistencyException>(() =>
+        await Assert.ThrowsAsync<InventoryLogicalDivergenceException>(() =>
             CreateHandler(new FakeFactory(unit)).HandleAsync(
                 Command(new DeductInvoiceStockItem(productId, 2)), TestContext.Current.CancellationToken));
     }
@@ -96,22 +99,25 @@ public sealed class DeductInvoiceStockHandlerTests
     }
 
     [Fact]
-    public async Task InvalidCommandIsRejectedBeforeOpeningUnit()
+    public async Task InvalidSemanticCommandPersistsRejectedResultAtomically()
     {
-        var factory = new FakeFactory();
-        var command = new DeductInvoiceStockCommand(Guid.Empty, Guid.NewGuid(), Guid.NewGuid(), []);
+        var unit = new FakeUnit([]);
+        var factory = new FakeFactory(unit);
+        var command = new DeductInvoiceStockCommand(Guid.Empty, Guid.NewGuid(), Guid.NewGuid(), [], Guid.NewGuid(), new string('A', 64));
 
         var result = await CreateHandler(factory).HandleAsync(command, TestContext.Current.CancellationToken);
 
         Assert.Equal(DeductionReason.InvalidRequest, result.Reason);
-        Assert.Equal(0, factory.CreatedCount);
+        Assert.Equal(1, factory.CreatedCount);
+        Assert.True(unit.Committed);
+        Assert.Equal(DeductionStatus.Rejected, unit.Result?.Result.Status);
     }
 
     private static DeductInvoiceStockHandler CreateHandler(IInventoryUnitOfWorkFactory factory) =>
         new(factory, new FakeGuidGenerator(), new FixedTimeProvider(), new FakeTelemetry());
 
     private static DeductInvoiceStockCommand Command(params DeductInvoiceStockItem[] items) =>
-        new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), items);
+        new(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), items, Guid.NewGuid(), new string('A', 64));
 
     private sealed class FakeFactory(params FakeUnit[] units) : IInventoryUnitOfWorkFactory
     {
@@ -132,6 +138,7 @@ public sealed class DeductInvoiceStockHandlerTests
     {
         public List<StockMovement> Movements { get; } = [];
         public bool Committed { get; private set; }
+        public StockDeductionResultRequest? Result { get; private set; }
 
         public Task<IReadOnlyDictionary<Guid, Product>> LoadProductsAsync(
             IReadOnlyCollection<Guid> productIds,
@@ -145,6 +152,13 @@ public sealed class DeductInvoiceStockHandlerTests
             Task.FromResult(existing ?? (IReadOnlyList<ExistingDeduction>)[]);
 
         public void AddMovement(StockMovement movement) => Movements.Add(movement);
+
+        public Task<ProcessedMessage?> GetProcessedMessageAsync(Guid messageId, CancellationToken cancellationToken) =>
+            Task.FromResult<ProcessedMessage?>(null);
+
+        public void AddProcessedMessage(ProcessedMessageRequest request) { }
+
+        public void AddResultOutbox(StockDeductionResultRequest request) => Result = request;
 
         public Task CommitAsync(CancellationToken cancellationToken)
         {

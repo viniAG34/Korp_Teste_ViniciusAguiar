@@ -269,3 +269,20 @@ Próximo marco: Outbox e publicação confirmada.
 - regressão integral: 163 testes aprovados, 0 falhas e 0 ignorados.
 
 Próximo marco: consumer idempotente do Inventory e transação conjunta de saldo, movimentos, Inbox e Outbox.
+
+### Marco 3 - Concluído em 2026-08-22
+
+- consumer do Inventory com prefetch 1, despacho sequencial e acknowledgment manual;
+- validação de JSON, envelope, versão, produtor e propriedades RabbitMQ antes do caso de uso;
+- SHA-256 calculado sobre os bytes exatos recebidos;
+- mesma combinação `MessageId + hash` consumida sem novo efeito ou nova resposta;
+- mesmo `MessageId` com corpo diferente classificado como violação determinística;
+- conclusão e rejeição confirmam Products, StockMovements, Inbox e Outbox na mesma transação `ReadCommitted`;
+- duplicidade lógica equivalente cria nova Inbox e nova conclusão sem reduzir saldo novamente;
+- conteúdo lógico divergente não produz efeito e é classificado para DLQ;
+- ACK somente após commit ou encaminhamento confirmado;
+- encaminhador mínimo de retry/DLQ antecipado como dependência do ACK seguro; TTL, estágios, esgotamento e `ProcessingFailed` permanecem no Marco 5;
+- TST-DST-007 a TST-DST-012 possuem evidências diretas ou parciais em PostgreSQL e RabbitMQ reais;
+- regressão integral: 167 testes aprovados, 0 falhas e 0 ignorados.
+
+Próximo marco: consumer de resultados no Billing.
