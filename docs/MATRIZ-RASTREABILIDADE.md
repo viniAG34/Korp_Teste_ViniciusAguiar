@@ -313,7 +313,7 @@ O relatório `RELATORIO-IMPLEMENTACAO-SDD-06.md` registra resultados, percentuai
 | QLT-001 a QLT-004 | Unitários, integração real, E2E e cobertura mínima | Todos | TST-DST-001 a TST-DST-025 |
 | QLT-005 a QLT-008 | Limites arquiteturais, rastreabilidade, dados protegidos e execução reproduzível | CA-DST-02, CA-DST-03, CA-DST-20 a CA-DST-22 | TST-DST-001, TST-DST-002, TST-DST-021 a TST-DST-025 |
 
-O SDD-07 possui Gate A e Gate B aprovados. O Marco 1 implementou a topologia RabbitMQ; o Marco 2 implementou Outbox e publisher confirms; o Marco 3 implementou o consumer idempotente do Inventory; o Marco 4 implementou o consumer transacional e idempotente dos resultados no Billing. TST-DST-001, TST-DST-002, TST-DST-007 a TST-DST-014 possuem evidências reais, enquanto TST-DST-004 e TST-DST-005 possuem evidência parcial. A regressão do quarto marco aprovou 170 testes sem falhas. Crash dirigido, retry completo, health e fluxo distribuído ponta a ponta permanecem nos marcos seguintes.
+O SDD-07 possui Gate A e Gate B aprovados. Os Marcos 1 a 5 implementaram topologia, Outbox confirmada, consumers idempotentes, retry limitado, DLQs e encerramento técnico seguro. TST-DST-001, TST-DST-002, TST-DST-007 a TST-DST-014, TST-DST-016 e a regra central de TST-DST-018 possuem evidências reais; TST-DST-004, TST-DST-005 e as provas temporais/de falha dirigida do retry possuem evidência parcial. A regressão do quinto marco aprovou 173 testes sem falhas. Crash dirigido, health, lifecycle e fluxo distribuído ponta a ponta permanecem nos marcos seguintes.
 
 ---
 

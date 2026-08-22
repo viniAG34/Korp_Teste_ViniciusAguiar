@@ -302,3 +302,19 @@ Próximo marco: consumer de resultados no Billing.
 - regressão integral: 170 testes aprovados, 0 falhas e 0 ignorados; o projeto Gateway permanece sem testes descobertos.
 
 Próximo marco: retry completo, DLQ e produção segura de `StockDeductionProcessingFailed`.
+
+### Marco 5 - Concluído em 2026-08-22
+
+- contador de retry ausente tratado como zero e valores malformados, negativos ou superiores a três enviados diretamente à DLQ;
+- sequência limitada às filas TTL de 5, 30 e 120 segundos, sem retry funcional ou infinito;
+- encaminhamento preserva corpo e propriedades, usa mensagem persistente, `mandatory` e publisher confirms;
+- DLQ recebe exchange, routing key, contador, código estável, instante UTC e consumer, sem exception message ou payload;
+- falha do encaminhamento mantém a entrega original por `NACK requeue=true` e aplica pausa antes da redelivery;
+- Billing esgotado preserva invoice e processo e envia o resultado à sua DLQ;
+- Inventory esgotado reabre transação e somente produz `StockDeductionProcessingFailed` quando Inbox e movimentos estão ausentes;
+- Inbox da solicitação e Outbox de falha técnica são confirmadas juntas, com causalidade apontando para a solicitação original;
+- movimentos existentes, estado já processado ou acesso inconclusivo não produzem resultado técnico falso;
+- TST-DST-016 e a regra central de TST-DST-018 possuem evidência direta; percurso temporal completo e falha dirigida de encaminhamento permanecem para a prova de resiliência do Marco 7;
+- regressão integral: 173 testes aprovados, 0 falhas e 0 ignorados; builds finais de Billing e Inventory sem erros ou avisos.
+
+Próximo marco: health checks, observabilidade e encerramento controlado.

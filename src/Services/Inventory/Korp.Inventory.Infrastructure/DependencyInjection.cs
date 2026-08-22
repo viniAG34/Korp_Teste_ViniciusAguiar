@@ -56,6 +56,7 @@ public static class DependencyInjection
         services.AddScoped<GetProductSnapshotHandler>();
         services.AddScoped<ListProductsHandler>();
         services.AddScoped<DeductInvoiceStockHandler>();
+        services.AddScoped<FinalizeStockDeductionFailureHandler>();
         return services;
     }
 }

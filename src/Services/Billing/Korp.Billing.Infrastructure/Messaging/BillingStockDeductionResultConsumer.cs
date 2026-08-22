@@ -14,9 +14,9 @@ public sealed class BillingRabbitMqDeliveryForwarder(
     private readonly SemaphoreSlim gate = new(1, 1);
     private IChannel? channel;
 
-    public async Task ForwardAsync(BasicDeliverEventArgs delivery, bool deterministic, CancellationToken cancellationToken)
+    public async Task ForwardAsync(BasicDeliverEventArgs delivery, int retry, bool deterministic,
+        string errorCode, CancellationToken cancellationToken)
     {
-        var retry = HeaderInt(delivery.BasicProperties.Headers, "x-retry-count");
         var dead = deterministic || retry >= 3;
         var routingKey = dead ? "billing.stock-deduction-result.dead.v1" : retry switch
         {
@@ -34,6 +34,14 @@ public sealed class BillingRabbitMqDeliveryForwarder(
                 ?? new Dictionary<string, object?>();
             headers["x-retry-count"] = dead ? retry : retry + 1;
             headers["x-original-queue"] = RabbitMqTopology.BillingQueue;
+            if (dead)
+            {
+                headers["x-original-exchange"] = delivery.Exchange;
+                headers["x-original-routing-key"] = delivery.RoutingKey;
+                headers["x-error-code"] = errorCode;
+                headers["x-failed-at-utc"] = DateTimeOffset.UtcNow.ToString("O");
+                headers["x-failed-consumer"] = "billing";
+            }
             var properties = new BasicProperties
             {
                 Persistent = true, ContentType = delivery.BasicProperties.ContentType,
@@ -66,6 +74,24 @@ public sealed class BillingRabbitMqDeliveryForwarder(
             byte[] bytes when int.TryParse(Encoding.UTF8.GetString(bytes), out var number) => number,
             _ => 0
         };
+    }
+
+    internal static bool TryRetryCount(IDictionary<string, object?>? headers, out int count)
+    {
+        count = 0;
+        if (headers is null || !headers.TryGetValue("x-retry-count", out var value) || value is null) return true;
+        try
+        {
+            count = value switch
+            {
+                byte number => number, short number => number, int number => number,
+                long number => checked((int)number),
+                byte[] bytes when int.TryParse(Encoding.UTF8.GetString(bytes), out var number) => number,
+                _ => -1
+            };
+        }
+        catch (OverflowException) { count = -1; }
+        return count is >= 0 and <= 3;
     }
 
     public async ValueTask DisposeAsync()
@@ -108,9 +134,18 @@ public sealed partial class BillingStockDeductionResultConsumer(
 
     private async Task HandleAsync(IChannel channel, BasicDeliverEventArgs delivery, CancellationToken cancellationToken)
     {
+        var forwarding = false;
         try
         {
             var headers = delivery.BasicProperties.Headers;
+            if (!BillingRabbitMqDeliveryForwarder.TryRetryCount(headers, out var retryCount))
+            {
+                forwarding = true;
+                await forwarder.ForwardAsync(delivery, 0, true, "invalid_retry_header", cancellationToken);
+                forwarding = false;
+                await channel.BasicAckAsync(delivery.DeliveryTag, false, cancellationToken);
+                return;
+            }
             var request = new StockDeductionResultDelivery(delivery.Body, delivery.BasicProperties.MessageId,
                 delivery.BasicProperties.Type, delivery.BasicProperties.CorrelationId,
                 delivery.BasicProperties.ContentType, delivery.BasicProperties.ContentEncoding,
@@ -120,7 +155,12 @@ public sealed partial class BillingStockDeductionResultConsumer(
             var result = await scope.ServiceProvider.GetRequiredService<StockDeductionResultMessageProcessor>()
                 .ProcessAsync(request, cancellationToken);
             if (result.Outcome == StockResultProcessingOutcome.DeterministicFailure)
-                await forwarder.ForwardAsync(delivery, true, cancellationToken);
+            {
+                forwarding = true;
+                await forwarder.ForwardAsync(delivery, retryCount, true,
+                    result.FailureCode ?? "deterministic_failure", cancellationToken);
+                forwarding = false;
+            }
             await channel.BasicAckAsync(delivery.DeliveryTag, false, cancellationToken);
             Log.MessageProcessed(logger, delivery.BasicProperties.MessageId ?? string.Empty, result.Outcome.ToString());
         }
@@ -129,10 +169,21 @@ public sealed partial class BillingStockDeductionResultConsumer(
         {
             try
             {
-                await forwarder.ForwardAsync(delivery, false, cancellationToken);
+                if (forwarding)
+                {
+                    await Task.Delay(250, cancellationToken);
+                    await channel.BasicNackAsync(delivery.DeliveryTag, false, true, cancellationToken);
+                    return;
+                }
+                BillingRabbitMqDeliveryForwarder.TryRetryCount(delivery.BasicProperties.Headers, out var retryCount);
+                forwarding = true;
+                await forwarder.ForwardAsync(delivery, retryCount, false,
+                    retryCount >= 3 ? "billing_processing_exhausted" : "transient_processing_failure",
+                    cancellationToken);
+                forwarding = false;
                 await channel.BasicAckAsync(delivery.DeliveryTag, false, cancellationToken);
                 Log.MessageRetried(logger, delivery.BasicProperties.MessageId ?? string.Empty,
-                    BillingRabbitMqDeliveryForwarder.HeaderInt(delivery.BasicProperties.Headers, "x-retry-count") + 1);
+                    retryCount + 1);
             }
             catch
             {

@@ -86,6 +86,19 @@ public sealed class InventoryUnitOfWork(
             request.CausationId, request.OccurredAtUtc));
     }
 
+    public void AddProcessingFailedOutbox(StockDeductionProcessingFailedRequest request)
+    {
+        var payload = new StockDeductionProcessingFailedV1(request.IssuanceProcessId, request.InvoiceId,
+            "stock_processing_failed", "Inventory processing retries were exhausted without confirmed stock effects.");
+        var envelope = new IntegrationEventEnvelope<StockDeductionProcessingFailedV1>(request.MessageId,
+            IntegrationEventTypes.StockDeductionProcessingFailed, 1, request.OccurredAtUtc,
+            request.CorrelationId, request.CausationId, IntegrationEventProducers.Inventory, payload);
+        context.OutboxMessages.Add(OutboxMessage.Create(request.MessageId,
+            IntegrationEventTypes.StockDeductionProcessingFailed, 1,
+            JsonSerializer.Serialize(envelope, JsonSerializerOptions.Web), request.CorrelationId,
+            request.CausationId, request.OccurredAtUtc));
+    }
+
     public async Task CommitAsync(CancellationToken cancellationToken)
     {
         try

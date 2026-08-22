@@ -40,6 +40,8 @@ public sealed record ProcessedMessage(string PayloadHash);
 public sealed record ProcessedMessageRequest(Guid MessageId, Guid CorrelationId, string PayloadHash, DateTimeOffset ProcessedAtUtc);
 public sealed record StockDeductionResultRequest(Guid MessageId, Guid CorrelationId, Guid CausationId,
     Guid IssuanceProcessId, Guid InvoiceId, DeductionResult Result, DateTimeOffset OccurredAtUtc);
+public sealed record StockDeductionProcessingFailedRequest(Guid MessageId, Guid CorrelationId,
+    Guid CausationId, Guid IssuanceProcessId, Guid InvoiceId, DateTimeOffset OccurredAtUtc);
 
 public interface IInventoryUnitOfWork : IAsyncDisposable
 {
@@ -55,7 +57,31 @@ public interface IInventoryUnitOfWork : IAsyncDisposable
     void AddMovement(StockMovement movement);
     void AddProcessedMessage(ProcessedMessageRequest request);
     void AddResultOutbox(StockDeductionResultRequest request);
+    void AddProcessingFailedOutbox(StockDeductionProcessingFailedRequest request);
     Task CommitAsync(CancellationToken cancellationToken);
+}
+
+public enum TerminalFailureStatus { Confirmed, AlreadyProcessed, Inconclusive }
+
+public sealed class FinalizeStockDeductionFailureHandler(
+    IInventoryUnitOfWorkFactory unitOfWorkFactory, IGuidGenerator guidGenerator, TimeProvider timeProvider)
+{
+    public async Task<TerminalFailureStatus> HandleAsync(
+        DeductInvoiceStockCommand command, CancellationToken cancellationToken)
+    {
+        await using var unit = await unitOfWorkFactory.CreateAsync(cancellationToken);
+        var processed = await unit.GetProcessedMessageAsync(command.EventId, cancellationToken);
+        if (processed is not null) return TerminalFailureStatus.AlreadyProcessed;
+        var movements = await unit.GetInvoiceDeductionsAsync(command.InvoiceId, cancellationToken);
+        if (movements.Count != 0) return TerminalFailureStatus.Inconclusive;
+
+        var now = timeProvider.GetUtcNow();
+        unit.AddProcessedMessage(new(command.EventId, command.CorrelationId, command.PayloadHash, now));
+        unit.AddProcessingFailedOutbox(new(guidGenerator.NewGuid(), command.CorrelationId,
+            command.EventId, command.IssuanceProcessId, command.InvoiceId, now));
+        await unit.CommitAsync(cancellationToken);
+        return TerminalFailureStatus.Confirmed;
+    }
 }
 
 public interface IInventoryUnitOfWorkFactory

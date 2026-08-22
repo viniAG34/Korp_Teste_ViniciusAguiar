@@ -55,11 +55,50 @@ public sealed class InventoryRabbitConsumerIntegrationTests : IAsyncLifetime
         {
             await RabbitMqTopologyInitializer.DeclareAsync(channel, TestContext.Current.CancellationToken);
             await channel.QueuePurgeAsync(RabbitMqTopology.InventoryQueue, TestContext.Current.CancellationToken);
+            await channel.QueuePurgeAsync(RabbitMqTopology.InventoryDeadLetterQueue, TestContext.Current.CancellationToken);
         }
         hostedServices = provider.GetServices<IHostedService>().ToArray();
         foreach (var service in hostedServices) await service.StartAsync(TestContext.Current.CancellationToken);
         await WaitUntilAsync(() => provider.GetRequiredService<RabbitMqTopologyState>().IsDeclared);
     }
+
+    [Fact]
+    public async Task TstDst016MalformedRetryHeaderGoesDirectlyToDlqWithSafeMetadata()
+    {
+        var messageId = Guid.NewGuid();
+        var correlationId = Guid.NewGuid();
+        var body = JsonSerializer.SerializeToUtf8Bytes(new { invalid = true });
+        await using var rabbit = await CreateConnectionAsync();
+        await using var channel = await rabbit.CreateChannelAsync(new CreateChannelOptions(true, true), TestContext.Current.CancellationToken);
+        var properties = new BasicProperties
+        {
+            Persistent = true, ContentType = "application/json", ContentEncoding = "utf-8",
+            MessageId = messageId.ToString(), Type = IntegrationEventTypes.StockDeductionRequested,
+            CorrelationId = correlationId.ToString(), Headers = new Dictionary<string, object?>
+            {
+                ["x-message-version"] = 1, ["x-producer"] = IntegrationEventProducers.Billing,
+                ["x-retry-count"] = "not-a-number"
+            }
+        };
+        await channel.BasicPublishAsync(RabbitMqTopology.BillingExchange, RabbitMqTopology.RequestRoutingKey,
+            true, properties, body, TestContext.Current.CancellationToken);
+
+        BasicGetResult? result = null;
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (result is null && DateTime.UtcNow < deadline)
+        {
+            result = await channel.BasicGetAsync(RabbitMqTopology.InventoryDeadLetterQueue, true, TestContext.Current.CancellationToken);
+            if (result is null) await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+        Assert.NotNull(result);
+        Assert.Equal(body, result!.Body.ToArray());
+        Assert.Equal("invalid_retry_header", Header(result.BasicProperties.Headers, "x-error-code"));
+        Assert.Equal("inventory", Header(result.BasicProperties.Headers, "x-failed-consumer"));
+        Assert.Equal(RabbitMqTopology.BillingExchange, Header(result.BasicProperties.Headers, "x-original-exchange"));
+    }
+
+    private static string? Header(IDictionary<string, object?>? headers, string key) =>
+        headers?[key] is byte[] bytes ? System.Text.Encoding.UTF8.GetString(bytes) : headers?[key]?.ToString();
 
     public async ValueTask DisposeAsync()
     {

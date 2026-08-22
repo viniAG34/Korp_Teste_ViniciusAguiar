@@ -159,6 +159,7 @@ public sealed class DeductInvoiceStockHandlerTests
         public void AddProcessedMessage(ProcessedMessageRequest request) { }
 
         public void AddResultOutbox(StockDeductionResultRequest request) => Result = request;
+        public void AddProcessingFailedOutbox(StockDeductionProcessingFailedRequest request) { }
 
         public Task CommitAsync(CancellationToken cancellationToken)
         {
